@@ -1,5 +1,6 @@
 """Training Runner - 실제 학습 로직"""
 import sys
+import shutil
 from pathlib import Path
 
 import pytorch_lightning as pl
@@ -62,27 +63,13 @@ class TrainRunner:
                 lr_backbone=self.config['model']['lr_backbone'],
                 weight_decay=self.config['model']['weight_decay'],
             )
-        
-        elif model_name in ["YOLOv11", "YOLOv12"]:
-            from ..data.transforms.yolo_transform import create_yolo_dataset
             
-            train_dataset = create_yolo_dataset(
-                dataset_meta, "train", self.config['data']['image_size']
-            )
-            val_dataset = create_yolo_dataset(
-                dataset_meta, "val", self.config['data']['image_size']
-            )
-            collate_fn = None
-            
-            ModelClass = MODEL_REGISTRY[model_name]
-            model = ModelClass(
-                model_size=self.config['model']['model_size'],
-                num_classes=self.config['model']['num_labels'],
-                lr=self.config['model']['learning_rate'],
-            )
-        
         else:
-            raise ValueError(f"Unknown model: {model_name}")
+            # YOLO 모델들은 _run_yolo_training()에서 처리되므로 여기서는 에러 발생
+            if model_name in ["YOLOv11", "YOLOv12", "yolov11", "yolo", "YOLO"]:
+                raise RuntimeError(f"YOLO model '{model_name}' should be handled by _run_yolo_training(), not _create_model_and_data()")
+            else:
+                raise ValueError(f"Unknown model: {model_name}. Available models: DETR, YOLOv11, YOLOv12")
         
         return model, train_dataset, val_dataset, collate_fn
     
@@ -152,7 +139,7 @@ class TrainRunner:
         )
         
         return trainer
-    
+        
     def run(self):
         """학습 실행"""
         print("\n" + "="*70)
@@ -165,6 +152,127 @@ class TrainRunner:
         print(f"Experiment ID: {self.exp_manager.timestamp}")
         sys.stdout.flush()
         
+        model_name = self.config['model']['arch_name']
+        
+        # YOLO 모델은 별도 처리 (Lightning checkpoint 사용 안 함)
+        if model_name in ["YOLOv11", "YOLOv12", "yolov11", "yolo", "YOLO"]:
+            print(" YOLO training mode: Using native YOLO weights (no Lightning checkpoints)")
+            self._run_yolo_training()
+        else:
+            # Lightning 기반 모델들 (DETR 등)
+            print(" Lightning training mode: Using PyTorch Lightning checkpoints")
+            self._run_lightning_training()
+    
+    def _run_yolo_training(self):
+        """YOLO 전용 학습 실행"""
+        print("\nCreating YOLO model...")
+
+        modified_config = self.config.copy()
+        modified_config['training'] = self.config['training'].copy()
+        modified_config['training']['project'] = str(self.exp_manager.exp_dir)
+        modified_config['training']['name'] = ''
+        modified_config['training']['exist_ok'] = True
+        
+        # YOLO 래퍼 사용
+        ModelClass = MODEL_REGISTRY[self.config['model']['arch_name']]
+        model = ModelClass(modified_config)
+        
+        # YOLO 학습 실행
+        print("Starting YOLO training...")
+        print(f"YOLO results will be saved to: {self.exp_manager.exp_dir}/yolo_training")
+        print(f"  (runs folder will NOT be created)")
+        results = model.train()
+        
+        print(f"\n YOLO training completed!")
+        print(f"   Results saved to: {results.save_dir}")
+        
+        self._organize_yolo_results(results.save_dir)
+        
+        return results
+    
+    def _organize_yolo_results(self, yolo_save_dir: Path):
+        """YOLO 학습 결과를 적절한 폴더로 정리"""
+        yolo_dir = Path(yolo_save_dir)
+        
+        if not yolo_dir.exists():
+            print(f"  YOLO results directory not found: {yolo_dir}")
+            return
+        
+        print("\n Organizing YOLO results...")
+        
+        is_exp_dir = yolo_dir == self.exp_manager.exp_dir
+
+        # 1. args.yaml -> config 폴더로 이동
+        args_yaml = yolo_dir / "args.yaml"
+        if args_yaml.exists():
+            target = self.exp_manager.config_dir / "yolo_args.yaml"
+            args_yaml.rename(target)
+            print(f"    Moved args.yaml to config/")
+        
+        # 2. weights/ -> checkpoints 폴더로 이동
+        weights_dir = yolo_dir / "weights"
+        if weights_dir.exists():
+            import shutil
+            target_weights = self.exp_manager.checkpoint_dir / "yolo_weights"
+            if target_weights.exists():
+                shutil.rmtree(target_weights)
+            shutil.move(str(weights_dir), str(target_weights))
+            print(f"    Moved weights/ to checkpoints/yolo_weights/")
+        
+        # 3. 시각화 파일들 (*.png, *.jpg) -> results 폴더로 이동
+        import shutil
+        for ext in ['*.png', '*.jpg']:
+            for img_file in yolo_dir.glob(ext):
+                target = self.exp_manager.results_dir / img_file.name
+                shutil.move(str(img_file), str(target))
+                print(f"    Moved {img_file.name} to results/")
+        
+        # 4. results.csv -> results 폴더로 이동
+        results_csv = yolo_dir / "results.csv"
+        if results_csv.exists():
+            target = self.exp_manager.results_dir / "yolo_results.csv"
+            results_csv.rename(target)
+            print(f"    Moved results.csv to results/")
+        
+        # 5. TensorBoard 로그 -> tensorboard 폴더로 이동
+        tb_files = list(yolo_dir.glob("**/events.out.tfevents.*"))
+        if tb_files:
+            import shutil
+            for tb_file in tb_files:
+                target = self.exp_manager.tensorboard_dir / tb_file.name
+                shutil.move(str(tb_file), str(target))
+            print(f"    Moved TensorBoard logs to tensorboard/")
+            
+            # TensorBoard 하위 폴더가 비어있으면 삭제
+            tb_subdir = yolo_dir / "tensorboard"
+            if tb_subdir.exists():
+                try:
+                    if not any(tb_subdir.iterdir()):
+                        tb_subdir.rmdir()
+                        print(f"    Removed empty tensorboard/ subdirectory")
+                except Exception as e:
+                    print(f"    Could not remove tensorboard/ subdirectory: {e}")
+        
+        # 6. 빈 train 폴더 삭제 (모든 파일이 이동된 경우)
+        if yolo_dir.parent == self.exp_manager.exp_dir:
+            try:
+                # 모든 파일과 폴더가 이동되었는지 확인
+                remaining_items = list(yolo_dir.iterdir())
+                if not remaining_items:
+                    yolo_dir.rmdir()
+                    print(f"    Removed empty {yolo_dir.name} directory")
+                else:
+                    print(f"    ⚠️  {yolo_dir.name} directory still contains: {[item.name for item in remaining_items]}")
+            except OSError as e:
+                # 폴더가 비어있지 않거나 권한 문제
+                print(f"    Warning: Could not remove {yolo_dir.name} directory: {e}")
+            except Exception as e:
+                print(f"    Warning: Unexpected error removing {yolo_dir.name}: {e}")
+        print(" Results organization completed!")
+
+
+    def _run_lightning_training(self):
+        """Lightning 기반 학습 실행 (DETR 등)"""
         # 2. 모델 & 데이터 생성
         print("\nCreating model and datasets...")
         model, train_dataset, val_dataset, collate_fn = self._create_model_and_data()

@@ -1,0 +1,176 @@
+# yolov12 3class 
+# yolov11 3class 
+experiment:
+  name: yolo11_tomato_3class_exp001
+  seed: 42
+  save_dir: exp
+  log_image_enabled: true
+  log_image_interval: 5  # validation 시 N epoch마다 이미지 저장
+
+model:
+  arch_name: yolov12
+  model_size: m  # n(nano), s(small), m(medium), l(large), x(xlarge)
+  pretrained_path: yolo12m.pt
+  num_classes: 3
+  confidence_threshold: 0.5
+  
+  # Optimizer settings (YOLO 스타일)
+  lr0: 0.003          # initial learning rate (SGD=1E-2, Adam=1E-3)
+  lrf: 0.01          # final OneCycleLR learning rate (lr0 * lrf)
+  momentum: 0.937    # SGD momentum/Adam beta1
+  weight_decay: 0.0005  # optimizer weight decay 5e-4
+  
+  # Loss coefficients
+  box: 7.5           # box loss gain
+  cls: 0.5           # cls loss gain  
+  dfl: 1.5           # dfl loss gain
+
+data:
+  dataset_name: TomatOD_YOLO_3
+  num_classes: 3
+  class_names:
+    - fully-ripe
+    - semi-ripe
+    - unripe
+  
+  # Paths (YOLO 형식)
+  data_root: data/TomatOD_YOLO_3
+  train_dir: data/TomatOD_YOLO_3/train/images
+  val_dir: data/TomatOD_YOLO_3/val/images
+  test_dir: data/TomatOD_YOLO_3/test/images
+  
+  # YOLO data.yaml 파일 경로
+  data_yaml: data/TomatOD_YOLO_3/data.yaml
+  
+  # DataLoader settings
+  batch_size: 24
+  num_workers: 8     # Linux에서는 더 높은 값 사용 가능
+  
+  # Image preprocessing
+  imgsz: 640         # YOLO 표준 이미지 크기
+  
+  # Data augmentation (YOLO 스타일)
+  use_augmentation: true
+  augmentation:
+    hsv_h: 0.015     # image HSV-Hue augmentation (fraction)
+    hsv_s: 0.7       # image HSV-Saturation augmentation (fraction)  
+    hsv_v: 0.4       # image HSV-Value augmentation (fraction)
+    degrees: 0.0     # image rotation (+/- deg)
+    translate: 0.1   # image translation (+/- fraction)
+    scale: 0.5       # image scale (+/- gain)
+    shear: 0.0       # image shear (+/- deg)
+    perspective: 0.0 # image perspective (+/- fraction), range 0-0.001
+    flipud: 0.0      # image flip up-down (probability)
+    fliplr: 0.5      # image flip left-right (probability)
+    mosaic: 1.0      # image mosaic (probability)
+    mixup: 0.0       # image mixup (probability)
+    copy_paste: 0.0  # segment copy-paste (probability)
+
+training:
+  epochs: 100
+  device: 2          # GPU device ID (0, 1, 2, 3 등)
+
+  
+  # Training settings
+  patience: 20       # EarlyStopping patience (epochs without improvement)
+  save: true         # save train checkpoints and predict results
+  save_period: -1    # 주기적 저장 비활성화 (best/last만 저장, disabled if < 1)
+  save_best: true
+  save_last: true
+  cache: false       # True/ram, disk or False. Use cache for data loading
+  
+  # Validation settings
+  val: true          # validate/test during training
+  
+  # Project organization
+  project: exp/yolo  # project name
+  name: null         # experiment name, 'exp' gets incremented if not specified
+  exist_ok: false    # whether to overwrite existing experiment
+  
+  # Visualization
+  plots: true        # save plots and images during train/val
+  
+  # Advanced settings
+  amp: true          # Automatic Mixed Precision (AMP) training
+  fraction: 1.0      # dataset fraction to train on (default is 1.0, all images in train set)
+  profile: false     # profile ONNX and TensorRT speeds during training for loggers
+  freeze: null       # freeze first n layers, or freeze list of layer indices during training
+  
+  # Multi-GPU settings
+  multi_scale: false # vary img-size +/- 50%
+  overlap_mask: true # masks should overlap during training (segment train only)
+  mask_ratio: 4      # mask downsample ratio (segment train only)
+  dropout: 0.0       # use dropout regularization (classify train only)
+
+evaluation:
+  confidence_threshold: 0.5
+  iou_threshold: 0.5
+  max_detections: 300  # YOLO는 더 많은 detection 지원
+  batch_size: 8       # 평가용 배치 크기
+  
+  # NMS settings
+  agnostic_nms: false  # class-agnostic NMS
+  multi_label: false   # NMS multiple labels per box
+  
+  # 저장할 메트릭들
+  metrics:
+    - precision
+    - recall  
+    - map50      # mAP@0.5
+    - map        # mAP@0.5:0.95
+    - map75      # mAP@0.75
+    - map_small  # mAP for small objects
+    - map_medium # mAP for medium objects  
+    - map_large  # mAP for large objects
+  
+  # 시각화 옵션
+  save_json: true          # save results to JSON file
+  save_hybrid: false       # save hybrid version of labels (labels + additional predictions)
+  conf: null              # object confidence threshold for detection (default 0.25 predict, 0.001 val)
+  iou: 0.6                # intersection over union (IoU) threshold for NMS
+  max_det: 300            # maximum number of detections per image
+  half: false             # use FP16 half-precision inference
+  dnn: false              # use OpenCV DNN for ONNX inference
+  plots: true             # save plots during val
+  
+  # Prediction settings
+  source: null            # source directory for images or videos
+  show: false             # show results if possible
+  save_txt: false         # save results as .txt file
+  save_conf: false        # save results with confidence scores
+  save_crop: false        # save cropped images with results
+  show_labels: true       # show object labels in plots
+  show_conf: true         # show object confidence scores in plots
+  vid_stride: 1           # video frame-rate stride
+  line_width: null        # line width of the bounding boxes
+  visualize: false        # visualize model features
+  augment: false          # apply image augmentation to prediction sources
+  agnostic_nms: false     # class-agnostic NMS
+  retina_masks: false     # use high-resolution segmentation masks
+
+logging:
+  # TensorBoard
+  tensorboard: true
+  
+  # Weights & Biases
+  wandb: false
+  wandb_project: tomato-detection-yolo
+  wandb_entity: null
+  
+  # Other loggers
+  clearml: false
+  comet: false
+
+hardware:
+  device: cuda
+  amp_enabled: true
+  workers: 8           # number of worker threads for data loading (per RANK if DDP)
+  
+  # Performance optimization
+  deterministic: true  # whether to enable deterministic mode
+  single_cls: false    # train multi-class data as single-class
+  rect: false          # rectangular training if mode='train' or rectangular validation if mode='val'
+  cos_lr: false        # use cosine learning rate scheduler
+  close_mosaic: 10     # disable mosaic augmentation for final epochs (0 to disable)
+  resume: false        # resume training from last checkpoint
+  min_memory: false    # minimize memory footprint loss function, can't be used with Multi-GPU

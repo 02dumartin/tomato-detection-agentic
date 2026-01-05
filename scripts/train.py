@@ -124,8 +124,16 @@ def main():
     print(f"Model: {config['model']['arch_name']}")
     print(f"Dataset: {config['data']['dataset_name']}")
     print(f"Batch size: {config['data'].get('batch_size', 'N/A')}")
-    print(f"Learning rate: {config['model'].get('learning_rate', 'N/A')}")
-    print(f"Max epochs: {config['trainer'].get('max_epochs', 'N/A')}")
+    print(f"Learning rate: {config['model'].get('learning_rate', config['model'].get('lr0', 'N/A'))}")
+
+    # DETR은 trainer, YOLO는 training 섹션 사용
+    if 'trainer' in config:
+        print(f"Max epochs: {config['trainer'].get('max_epochs', 'N/A')}")
+    elif 'training' in config:
+        print(f"Max epochs: {config['training'].get('epochs', 'N/A')}")
+    else:
+        print(f"Max epochs: N/A")
+
     if config.get('debug'):
         print("⚠️  DEBUG MODE ENABLED")
     print("="*60 + "\n")

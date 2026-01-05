@@ -43,14 +43,22 @@ class ExperimentManager:
     
     def _create_directories(self):
         """실험 폴더 생성"""
-        for directory in [self.config_dir, self.checkpoint_dir, 
-                         self.tensorboard_dir, self.results_dir]:
+        # 기본 디렉토리들
+        directories = [self.config_dir, self.tensorboard_dir, self.results_dir]
+        
+        # YOLO 모델이 아닌 경우에만 checkpoint 디렉토리 생성
+        model_name = self.config['model']['arch_name'].lower()
+        if model_name not in ["yolov11", "yolov12", "yolo"]:
+            directories.append(self.checkpoint_dir)
+        else:
+            print("🔧 YOLO model detected: Skipping checkpoint directory creation")
+        
+        for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
     
     def _save_experiment_info(self):
         """Config 및 메타데이터 저장"""
-        # Config 저장
-        config_path = self.exp_dir / "config.yaml"
+        config_path = self.config_dir / "config.yaml"
         save_config(self.config, config_path)
         
         # Git 정보 저장

@@ -1,6 +1,6 @@
 """Models module"""
 from .detr_model import DetrLightningModule
-# from .yolov11_model import YOLOv11LightningModule
+from .yolov11_model import YOLOv11LightningModule, YOLOv11Wrapper
 # from .yolov12_model import YOLOv12LightningModule
 # from .mmdet_model import MMDetLightningModule
 # from .florence_model import FlorenceLightningModule
@@ -10,7 +10,10 @@ from .detr_model import DetrLightningModule
 MODEL_REGISTRY = {
     'detr': DetrLightningModule,
     'DETR': DetrLightningModule,
-    # 'YOLOv11': YOLOv11LightningModule,
+    'yolov11': YOLOv11Wrapper,  # Lightning 없이 직접 사용
+    'YOLOv11': YOLOv11Wrapper,
+    'yolo': YOLOv11Wrapper,
+    'YOLO': YOLOv11Wrapper,
     # 'YOLOv12': YOLOv12LightningModule,
     # 'MMDetection': MMDetLightningModule,
     # 'Florence': FlorenceLightningModule,
@@ -20,5 +23,6 @@ MODEL_REGISTRY = {
 __all__ = [
     'MODEL_REGISTRY',
     'DetrLightningModule',
+    'YOLOv11LightningModule',
+    'YOLOv11Wrapper',
 ]
-

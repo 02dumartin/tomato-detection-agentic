@@ -12,8 +12,8 @@ model:
   score_threshold: 0.5
 
   # Optimizer settings
-  learning_rate: 0.0001
-  lr_backbone: 0.00001
+  learning_rate: 0.0003
+  lr_backbone: 0.00003
   weight_decay: 0.0001
   
   # Detection settings
@@ -50,7 +50,7 @@ data:
   test_ann_file: custom_test.json
   
   # DataLoader settings
-  batch_size: 8
+  batch_size: 24
   num_workers: 0  # Windows에서는 0 권장
   pin_memory: true
   
@@ -70,7 +70,7 @@ data:
       prob: 0.2
 
 trainer:
-  max_epochs: 50
+  max_epochs: 100
   accelerator: gpu
   devices: 1
   precision: 16-mixed
@@ -80,7 +80,7 @@ trainer:
   check_val_every_n_epoch: 1
 
   # Gradient settings
-  accumulate_grad_batches: 4  # 실효 배치: 8 × 4 = 32
+  accumulate_grad_batches: 4  # 실효 배치: 24 × 4 = 96
   gradient_clip_val: 0.1
   gradient_clip_algorithm: norm
   
@@ -98,13 +98,15 @@ trainer:
     filename: best-{epoch:02d}-{val_loss:.2f}
     auto_insert_metric_name: false
 
-  
 
 evaluation:
   score_threshold: 0.5
   iou_threshold: 0.5
   nms_threshold: 0.5
   max_detections: 100
+  batch_size: 8  # 평가용 배치 크기 (학습과 다를 수 있음)
+  
+  # 저장할 메트릭들
   metrics:
     - map  # mean Average Precision
     - map_50
@@ -112,6 +114,15 @@ evaluation:
     - mar_1
     - mar_10
     - mar_100
+    - precision
+    - recall
+    - f1_score
+  
+  # 시각화 옵션
+  save_predictions: true
+  save_confusion_matrix: true
+  save_per_class_metrics: true
+
 
 logging:
   tensorboard:

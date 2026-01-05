@@ -65,7 +65,7 @@ data:
       prob: 0.2
 
 trainer:
-  max_epochs: 50
+  max_epochs: 100
   accelerator: gpu
   devices: 1
   precision: 16-mixed
