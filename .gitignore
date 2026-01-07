@@ -26,9 +26,29 @@ wandb/
 
 # Data
 /data/
+
+# Images (all formats)
 *.png
 *.jpg
 *.jpeg
+*.JPG
+*.JPEG
+*.PNG
+*.gif
+*.GIF
+*.bmp
+*.BMP
+*.tiff
+*.TIFF
+*.tif
+*.TIF
+*.webp
+*.WEBP
+*.svg
+*.SVG
+
+# Results (experiment outputs)
+results/
 
 # IDE
 .vscode/

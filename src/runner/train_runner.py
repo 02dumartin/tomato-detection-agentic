@@ -220,7 +220,7 @@ class TrainRunner:
                     for i, file in enumerate(self.files):
                         if i == 0:
                             # 첫 번째 파일(터미널)에는 원본 출력
-                            file.write(obj)
+                        file.write(obj)
                         else:
                             # 나머지 파일(로그 파일)에는 ANSI 코드 제거
                             cleaned = remove_ansi_codes(obj)

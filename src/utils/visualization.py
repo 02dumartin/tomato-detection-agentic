@@ -9,7 +9,7 @@ import torchvision.transforms as transforms
 COLORS = [
     [1.0, 0.0, 0.0],    # fully-ripe (red) - 진한 빨강
     [1.0, 0.647, 0.0],  # semi-ripe (orange) - 진한 주황
-    [0.0, 0.5, 0.0],    # unripe (green) - 진한 초록
+    [0.0, 0.5, 0.0],    # unripe (green) - 초록
 ]
 
 def box_cxcywh_to_xyxy(x):
