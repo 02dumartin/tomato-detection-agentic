@@ -1,0 +1,8 @@
+{
+  "output_dir": "/home/hyeonjin/tomato-detection-agentic/results/yolov12/TomatOD_YOLO_3_yolov12_260106_1/test/yolo_predictions/yolo_predictions",
+  "structure": {
+    "images": "Predicted images with bounding boxes (saved by YOLO)",
+    "labels": "YOLO format label files (.txt) - one per image",
+    "json": "Predictions in JSON format (if save_json=True)"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "detection_metrics": {
+    "map_50": 0.7852708097009938,
+    "map": 0.5377050202154823,
+    "map_75": 0.6370660596730949
+  },
+  "detailed_statistics": {
+    "total_statistics": {
+      "overall_precision": 0.7826476683143269,
+      "overall_recall": 0.7702842377260982,
+      "overall_f1": 0.7764167382364492
+    },
+    "per_class_ap": {
+      "ap_50": {
+        "fully-ripe": 0.7902079387760503,
+        "semi-ripe": 0.7093763290985692,
+        "unripe": 0.856228161228362
+      },
+      "ap_50_95": {
+        "fully-ripe": 0.5361693442709037,
+        "semi-ripe": 0.5108619540810441,
+        "unripe": 0.5660837622944995
+      },
+      "ap_75": {}
+    }
+  },
+  "model_complexity": {
+    "total_params": 20032345,
+    "trainable_params": 0,
+    "params_m": 20.032345,
+    "model_size_mb": 76.41733169555664,
+    "gflops": 33.8292992,
+    "gflops_formatted": "33.829G"
+  },
+  "model_info": {
+    "backbone": "yolov11-m",
+    "arch_name": "yolov11",
+    "model_size": "m"
+  }
+}

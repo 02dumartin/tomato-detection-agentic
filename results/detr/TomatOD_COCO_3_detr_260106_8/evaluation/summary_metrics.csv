@@ -1,0 +1,11 @@
+Metric,Value
+mAP@0.5,0.5781
+fully-ripe_AP@0.5:0.95,0.3547
+semi-ripe_AP@0.5:0.95,0.1697
+unripe_AP@0.5:0.95,0.3896
+mAP@0.5:0.95,0.3047
+mAP@0.75,0.2506
+Precision,0.8141
+Recall,0.8274
+Parameter(M),41.50
+GFLOPs,58.75

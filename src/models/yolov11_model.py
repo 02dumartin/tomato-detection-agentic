@@ -386,6 +386,10 @@ class YOLOv11Wrapper:
         original_tensorboard = os.environ.get('TENSORBOARD', None)
         os.environ['TENSORBOARD'] = '1'
         
+        import ultralytics
+        if hasattr(ultralytics, 'settings'):
+            ultralytics.settings.tensorboard = True
+            
         try:
             # 학습 실행
             results = self.model.train(**train_args)
@@ -456,6 +460,35 @@ class YOLOv11Wrapper:
             
         except Exception as e:
             print(f"❌ Failed to create TensorBoard logs: {e}")
+    
+    @classmethod
+    def load_from_checkpoint(cls, checkpoint_path, model_size='m', num_classes=3, lr=0.001, **kwargs):
+        """체크포인트에서 모델 로드"""
+        from ultralytics import YOLO
+        
+        # YOLO 모델 로드 (.pt 파일 직접 로드)
+        model = YOLO(str(checkpoint_path))
+        
+        # 래퍼 객체 생성 (임시 config 사용)
+        # 실제로는 config가 필요하지만, 평가 시에는 모델만 필요
+        temp_config = {
+            'model': {
+                'pretrained_path': str(checkpoint_path),
+                'model_size': model_size,
+                'num_labels': num_classes,
+            },
+            'data': {
+                'data_root': '',  # 평가 시 재설정됨
+                'num_classes': num_classes,
+                'class_names': [f'class_{i}' for i in range(num_classes)],
+            },
+            'training': {}
+        }
+        
+        wrapper = cls(temp_config)
+        wrapper.model = model  # 로드된 모델로 교체
+        
+        return wrapper
     
     def evaluate(self, **kwargs):
         """YOLO 평가"""

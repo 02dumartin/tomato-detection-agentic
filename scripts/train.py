@@ -135,7 +135,7 @@ def main():
         print(f"Max epochs: N/A")
 
     if config.get('debug'):
-        print("⚠️  DEBUG MODE ENABLED")
+        print("  DEBUG MODE ENABLED")
     print("="*60 + "\n")
     
     # Create runner and train

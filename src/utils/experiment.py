@@ -18,14 +18,18 @@ class ExperimentManager:
     def __init__(self, config):
         self.config = config
         
-        # Experiment ID 생성 (타임스탬프)
-        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.experiment_id = self.timestamp
-        
-        # 실험 디렉토리 구조: exp/{model}/{dataset}_{timestamp}
+        # Experiment ID 생성 (날짜 + 번호)
+        date_str = datetime.now().strftime("%y%m%d")
         model_name = config['model']['arch_name']
         dataset_name = config['data']['dataset_name']
-        exp_name = f"{dataset_name}_{self.timestamp}"
+        
+        # 실험 디렉토리 구조: exp/{model}/{dataset}_{model}_{date}_{number}
+        # 같은 날짜에 같은 데이터+모델 조합이 있으면 번호 증가
+        exp_base_name = f"{dataset_name}_{model_name}_{date_str}"
+        exp_name = self._get_experiment_name(Path(config['experiment']['save_dir']) / model_name, exp_base_name)
+        
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.experiment_id = exp_name
         
         self.exp_dir = Path(config['experiment']['save_dir']) / model_name / exp_name
         
@@ -34,6 +38,7 @@ class ExperimentManager:
         self.checkpoint_dir = self.exp_dir / "checkpoints"
         self.tensorboard_dir = self.exp_dir / "tensorboard"
         self.results_dir = self.exp_dir / "results"
+        self.log_dir = self.exp_dir / "log"
         
         # 디렉토리 생성
         self._create_directories()
@@ -41,10 +46,39 @@ class ExperimentManager:
         # Config와 metadata 저장
         self._save_experiment_info()
     
+    def _get_experiment_name(self, base_dir: Path, exp_base_name: str) -> str:
+        """실험 이름 생성: 같은 날짜에 같은 조합이 있으면 번호 증가"""
+        base_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 기존 실험 디렉토리 확인
+        existing_dirs = [d for d in base_dir.iterdir() if d.is_dir() and d.name.startswith(exp_base_name)]
+        
+        if not existing_dirs:
+            # 첫 번째 실험
+            return f"{exp_base_name}_1"
+        else:
+            # 번호 추출 및 최대값 찾기
+            numbers = []
+            for dir_name in existing_dirs:
+                parts = dir_name.name.split('_')
+                if len(parts) > 0:
+                    try:
+                        num = int(parts[-1])
+                        numbers.append(num)
+                    except ValueError:
+                        pass
+            
+            if numbers:
+                next_number = max(numbers) + 1
+            else:
+                next_number = 1
+            
+            return f"{exp_base_name}_{next_number}"
+    
     def _create_directories(self):
         """실험 폴더 생성"""
         # 기본 디렉토리들
-        directories = [self.config_dir, self.tensorboard_dir, self.results_dir]
+        directories = [self.config_dir, self.tensorboard_dir, self.results_dir, self.log_dir]
         
         # YOLO 모델이 아닌 경우에만 checkpoint 디렉토리 생성
         model_name = self.config['model']['arch_name'].lower()
@@ -151,4 +185,100 @@ class ExperimentManager:
         print(f"     Root:         {self.exp_dir}")
         print(f"     Checkpoints:  {self.checkpoint_dir}")
         print(f"     TensorBoard:  {self.tensorboard_dir}")
+        print(f"     Log:          {self.log_dir}")
         print(f"{'='*70}\n")
+
+
+def extract_exp_info_from_checkpoint(checkpoint_path: str, config: Dict) -> Dict[str, str]:
+    """
+    Checkpoint 경로에서 실험 정보 추출
+    
+    Args:
+        checkpoint_path: 체크포인트 파일 경로
+        config: 설정 딕셔너리
+    
+    Returns:
+        {'model_name': str, 'exp_name': str}
+    """
+    checkpoint_path = Path(checkpoint_path)
+    parts = checkpoint_path.parts
+    
+    # exp 디렉토리 찾기
+    try:
+        exp_idx = parts.index('exp') if 'exp' in parts else -1
+        if exp_idx >= 0 and len(parts) > exp_idx + 2:
+            model_name = parts[exp_idx + 1]  # yolov11
+            exp_name = parts[exp_idx + 2]    # TomatOD_YOLO_3_20260106_105855 또는 TomatOD_YOLO_3_yolov11_20260106_1
+            
+            # exp_name이 새 형식인지 확인
+            # 새 형식: dataset_model_date_number (예: TomatOD_YOLO_3_yolov11_20260106_1)
+            exp_parts = exp_name.split('_')
+            
+            # 새 형식 체크: 마지막에서 3번째가 6자리 숫자(날짜)이고, 마지막이 숫자(번호)인 경우
+            is_new_format = (len(exp_parts) >= 5 and 
+                           exp_parts[-3].isdigit() and len(exp_parts[-3]) == 6 and
+                           exp_parts[-1].isdigit() and
+                           exp_parts[-2] == model_name.lower())
+            
+            if not is_new_format:
+                # 기존 형식이면 그대로 사용 (하위 호환성)
+                pass
+            
+            return {
+                'model_name': model_name,
+                'exp_name': exp_name
+            }
+    except:
+        pass
+    
+    # 추출 실패 시 config에서 정보 가져오기
+    model_name = config['model']['arch_name']
+    dataset_name = config['data']['dataset_name']
+    date_str = datetime.now().strftime("%y%m%d")
+    exp_base_name = f"{dataset_name}_{model_name}_{date_str}"
+    exp_dir = Path("exp") / model_name
+    exp_name = get_experiment_name(exp_dir, exp_base_name)
+    
+    return {
+        'model_name': model_name,
+        'exp_name': exp_name
+    }
+
+
+def get_experiment_name(base_dir: Path, exp_base_name: str) -> str:
+    """
+    실험 이름 생성: 같은 날짜에 같은 조합이 있으면 번호 증가
+    
+    Args:
+        base_dir: 실험 디렉토리 기본 경로
+        exp_base_name: 실험 기본 이름
+    
+    Returns:
+        실험 이름 (예: "TomatOD_YOLO_3_yolov11_260106_1")
+    """
+    base_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 기존 실험 디렉토리 확인
+    existing_dirs = [d for d in base_dir.iterdir() if d.is_dir() and d.name.startswith(exp_base_name)]
+    
+    if not existing_dirs:
+        # 첫 번째 실험
+        return f"{exp_base_name}_1"
+    else:
+        # 번호 추출 및 최대값 찾기
+        numbers = []
+        for dir_name in existing_dirs:
+            parts = dir_name.name.split('_')
+            if len(parts) > 0:
+                try:
+                    num = int(parts[-1])
+                    numbers.append(num)
+                except ValueError:
+                    pass
+        
+        if numbers:
+            next_number = max(numbers) + 1
+        else:
+            next_number = 1
+        
+        return f"{exp_base_name}_{next_number}"

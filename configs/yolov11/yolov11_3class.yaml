@@ -48,22 +48,22 @@ data:
   # Image preprocessing
   imgsz: 640         # YOLO 표준 이미지 크기
   
-  # Data augmentation (YOLO 스타일)
+  # Data augmentation (DETR config 기반)
   use_augmentation: true
   augmentation:
-    hsv_h: 0.015     # image HSV-Hue augmentation (fraction)
-    hsv_s: 0.7       # image HSV-Saturation augmentation (fraction)  
-    hsv_v: 0.4       # image HSV-Value augmentation (fraction)
+    hsv_h: 0.05      # image HSV-Hue augmentation 
+    hsv_s: 0.2       # image HSV-Saturation augmentation 
+    hsv_v: 0.2       # image HSV-Value augmentation 
     degrees: 0.0     # image rotation (+/- deg)
     translate: 0.1   # image translation (+/- fraction)
-    scale: 0.5       # image scale (+/- gain)
+    scale: 0.5       # image scale (+/- gain) 
     shear: 0.0       # image shear (+/- deg)
-    perspective: 0.0 # image perspective (+/- fraction), range 0-0.001
-    flipud: 0.0      # image flip up-down (probability)
-    fliplr: 0.5      # image flip left-right (probability)
-    mosaic: 1.0      # image mosaic (probability)
-    mixup: 0.0       # image mixup (probability)
-    copy_paste: 0.0  # segment copy-paste (probability)
+    perspective: 0.0 # image perspective (+/- fraction), range 0-0.001 
+    flipud: 0.0      # image flip up-down (probability) 
+    fliplr: 0.5      # image flip left-right (probability) 
+    mosaic: 1.0      # image mosaic (probability) - YOLO 전용
+    mixup: 0.0       # image mixup (probability) - YOLO 전용
+    copy_paste: 0.0  # segment copy-paste (probability) - YOLO 전용
 
 training:
   epochs: 100

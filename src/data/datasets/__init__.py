@@ -8,6 +8,8 @@ DatasetRegistry.register("TomatOD_3")(TomatOD3Meta)
 DatasetRegistry.register("TomatOD_1")(TomatOD1Meta)
 DatasetRegistry.register("TomatOD_COCO_3")(TomatOD3Meta)  # Alias
 DatasetRegistry.register("TomatOD_COCO_1")(TomatOD1Meta)  # Alias
+DatasetRegistry.register("TomatOD_YOLO_3")(TomatOD3Meta)  # Alias for YOLO format
+DatasetRegistry.register("TomatOD_YOLO_1")(TomatOD1Meta)  # Alias for YOLO format
 
 DATASET_REGISTRY = DatasetRegistry
 
