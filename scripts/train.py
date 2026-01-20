@@ -10,7 +10,7 @@ Examples:
     python scripts/train.py --config configs/DETR/detr_3class.yaml
     
     # Override with CLI arguments
-    python scripts/train.py --config configs/DETR/detr_3class.yaml \
+    python scripts/train.py --config configs/DETR/detr_3class.yaml
         --batch-size 16 --lr 0.0001
     
     # CLI only (uses default config)

@@ -5,11 +5,68 @@ from pathlib import Path
 
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, Callback
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from ..registry import MODEL_REGISTRY, DATASET_REGISTRY
 from ..utils.experiment import ExperimentManager
+
+
+class Tee:
+    """터미널 출력을 콘솔과 파일에 동시에 출력하는 클래스"""
+    def __init__(self, *files):
+        self.files = files
+    
+    def write(self, obj):
+        for f in self.files:
+            f.write(obj)
+            f.flush()
+    
+    def flush(self):
+        for f in self.files:
+            f.flush()
+
+
+class SimpleEpochLogger(Callback):
+    """Epoch 종료 시 한 줄로 로그를 출력하는 콜백"""
+    
+    def on_validation_epoch_end(self, trainer, pl_module):
+        """Validation epoch 종료 시 한 줄로 로그 출력 (validation이 train 후에 실행되므로 여기서 출력)"""
+        metrics = trainer.callback_metrics
+        current_epoch = trainer.current_epoch
+        max_epochs = trainer.max_epochs
+        
+        # 주요 메트릭 추출 (값이 tensor인 경우 item()으로 변환)
+        def get_metric(key, default='N/A'):
+            val = metrics.get(key, default)
+            if hasattr(val, 'item'):
+                return val.item()
+            return val if val != default else default
+        
+        train_loss = get_metric('train_loss', get_metric('loss', 'N/A'))
+        val_loss = get_metric('val_loss', 'N/A')
+        val_map = get_metric('val_map', 'N/A')
+        val_map_50 = get_metric('val_map_50', 'N/A')
+        val_map_75 = get_metric('val_map_75', 'N/A')
+        
+        # 포맷팅 헬퍼 함수 (숫자면 포맷팅, 아니면 그대로)
+        def format_value(val):
+            if isinstance(val, (int, float)):
+                return f"{val:.4f}"
+            return str(val)
+        
+        # 한 줄로 출력
+        if train_loss != 'N/A' and val_loss != 'N/A':
+            log_line = (
+                f"Epoch {current_epoch+1}/{max_epochs} | "
+                f"train_loss: {format_value(train_loss)} | "
+                f"val_loss: {format_value(val_loss)} | "
+                f"val_map: {format_value(val_map)} | "
+                f"val_map_50: {format_value(val_map_50)} | "
+                f"val_map_75: {format_value(val_map_75)}"
+            )
+            print(log_line)
+            sys.stdout.flush()
 
 
 class TrainRunner:
@@ -55,7 +112,7 @@ class TrainRunner:
             val_dataset = create_detr_dataset(dataset_meta, "val", imageprocessor, self.config)
             collate_fn = DetrCocoDataset.create_collate_fn(imageprocessor)
             
-            # MODEL_REGISTRY에서 모델 찾기 (대소문자 구분 없이)
+            # MODEL_REGISTRY에서 모델 찾기
             model_key = model_name if model_name in MODEL_REGISTRY else model_name.lower()
             if model_key not in MODEL_REGISTRY:
                 raise ValueError(f"Unknown model: {model_name}. Available models: {list(MODEL_REGISTRY.keys())}")
@@ -115,7 +172,10 @@ class TrainRunner:
             mode=self.config['trainer']['early_stopping']['mode']
         )
         
-        return [checkpoint_callback, early_stop_callback]
+        # 한 줄 로그 출력 콜백 추가
+        simple_logger = SimpleEpochLogger()
+        
+        return [checkpoint_callback, early_stop_callback, simple_logger]
     
     def _create_logger(self):
         """Logger 생성"""
@@ -163,8 +223,16 @@ class TrainRunner:
         
         # YOLO 모델 (대소문자 구분 없이 체크)
         if model_name_lower in ["yolov11", "yolov12", "yolo"]:
-            print(" YOLO training mode: Using native YOLO weights (no Lightning checkpoints)")
+            print("YOLO training mode: Using native YOLO weights (no Lightning checkpoints)")
             self._run_yolo_training()
+        # Florence-2 모델
+        elif model_name_lower in ["florence2", "florence-2", "florence_2"]:
+            print("Florence-2 training mode: LoRA fine-tuning")
+            self._run_florence2_training()
+        # Grounding DINO 모델
+        elif model_name_lower in ["groundingdino", "gdino", "grounding_dino"]:
+            print("Grounding DINO training mode: Using official repository")
+            self._run_gdino_training()
         else:
             # Lightning 기반 모델
             print(" Lightning training mode: Using PyTorch Lightning checkpoints")
@@ -172,19 +240,7 @@ class TrainRunner:
     
     def _run_yolo_training(self):
         """YOLO 전용 학습 실행"""
-        import sys
-        
-        # 로그 파일 설정
-        log_file = self.exp_manager.log_dir / f"train_{self.exp_manager.timestamp}.log"
-        
         print("\nCreating YOLO model...")
-        print(f"Log file: {log_file}")
-
-        modified_config = self.config.copy()
-        modified_config['training'] = self.config['training'].copy()
-        modified_config['training']['project'] = str(self.exp_manager.exp_dir)
-        modified_config['training']['name'] = ''
-        modified_config['training']['exist_ok'] = True
         
         # YOLO 래퍼 사용 (대소문자 구분 없이)
         arch_name = self.config['model']['arch_name']
@@ -192,83 +248,28 @@ class TrainRunner:
         if model_key not in MODEL_REGISTRY:
             raise ValueError(f"Unknown model: {arch_name}. Available models: {list(MODEL_REGISTRY.keys())}")
         ModelClass = MODEL_REGISTRY[model_key]
-        model = ModelClass(modified_config)
+        model = ModelClass(self.config)
         
         # YOLO 학습 실행
         print("Starting YOLO training...")
-        print(f"YOLO results will be saved to: {self.exp_manager.exp_dir}/yolo_training")
-        print(f"  (runs folder will NOT be created)")
+        print(f"YOLO results will be saved to: {self.exp_manager.exp_dir}")
         
-        # 로그 파일에 출력 저장 (터미널에도 출력)
-        import re
-        
-        def remove_ansi_codes(text):
-            """ANSI escape 코드 제거"""
-            # ANSI escape sequence 제거 (색상, 커서 제어 등)
-            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-            return ansi_escape.sub('', text)
-        
-        with open(log_file, 'w', encoding='utf-8', buffering=1) as f:
-            class Tee:
-                def __init__(self, *files):
-                    self.files = files
-                    # 첫 번째 파일(터미널)의 속성들을 상속
-                    if files:
-                        self._original = files[0]
-                
-                def write(self, obj):
-                    for i, file in enumerate(self.files):
-                        if i == 0:
-                            # 첫 번째 파일(터미널)에는 원본 출력
-                        file.write(obj)
-                        else:
-                            # 나머지 파일(로그 파일)에는 ANSI 코드 제거
-                            cleaned = remove_ansi_codes(obj)
-                            file.write(cleaned)
-                        # 매번 flush하여 실시간 기록
-                        file.flush()
-                
-                def flush(self):
-                    for file in self.files:
-                        file.flush()
-                
-                def isatty(self):
-                    # PyTorch Lightning이 터미널인지 확인할 때 사용
-                    return self._original.isatty() if hasattr(self._original, 'isatty') else False
-                
-                def __getattr__(self, name):
-                    # 다른 속성들은 원본에서 가져오기
-                    return getattr(self._original, name) if hasattr(self._original, name) else None
-            
-            # stdout과 stderr를 파일과 터미널 둘 다에 출력하도록 설정
-            original_stdout = sys.stdout
-            original_stderr = sys.stderr
-            
-            try:
-                sys.stdout = Tee(original_stdout, f)
-                sys.stderr = Tee(original_stderr, f)
-                
-                # Python의 stdout 버퍼링 비활성화
-                import os
-                os.environ['PYTHONUNBUFFERED'] = '1'
-                
-                results = model.train()
-            finally:
-                # 원래 stdout/stderr로 복원
-                sys.stdout = original_stdout
-                sys.stderr = original_stderr
-        
-        print(f"\n Training log saved to: {log_file}")
+        results = model.train(self.exp_manager.exp_dir)
         
         print(f"\n YOLO training completed!")
         print(f"   Results saved to: {results.save_dir}")
+        
+        # results 폴더 즉시 생성 (학습 중에도 사용 가능하도록)
+        results_dir = self.exp_manager.exp_dir / "results"
+        results_dir.mkdir(exist_ok=True)
         
         self._organize_yolo_results(results.save_dir)
         
         return results
     
     def _organize_yolo_results(self, yolo_save_dir: Path):
-        """YOLO 학습 결과를 적절한 폴더로 정리"""
+        """YOLO 학습 결과를 적절한 폴더로 정리 (YOLO 전용)"""
+        import shutil
         yolo_dir = Path(yolo_save_dir)
         
         if not yolo_dir.exists():
@@ -277,44 +278,58 @@ class TrainRunner:
         
         print("\n Organizing YOLO results...")
         
-        is_exp_dir = yolo_dir == self.exp_manager.exp_dir
-
-        # 1. args.yaml -> config 폴더로 이동
+        # results 폴더 생성 (YOLO 자동 생성 결과용)
+        results_dir = self.exp_manager.exp_dir / "results"
+        results_dir.mkdir(exist_ok=True)
+        
+        # 1. args.yaml -> exp_dir로 직접 이동 (config 폴더 없이)
         args_yaml = yolo_dir / "args.yaml"
         if args_yaml.exists():
-            target = self.exp_manager.config_dir / "yolo_args.yaml"
+            target = self.exp_manager.exp_dir / "yolo_args.yaml"
             args_yaml.rename(target)
-            print(f"    Moved args.yaml to config/")
+            print(f"    Moved args.yaml to exp_dir/")
         
         # 2. weights/ -> checkpoints 폴더로 이동
         weights_dir = yolo_dir / "weights"
         if weights_dir.exists():
-            import shutil
             target_weights = self.exp_manager.checkpoint_dir / "yolo_weights"
             if target_weights.exists():
                 shutil.rmtree(target_weights)
             shutil.move(str(weights_dir), str(target_weights))
             print(f"    Moved weights/ to checkpoints/yolo_weights/")
         
-        # 3. 시각화 파일들 (*.png, *.jpg) -> results 폴더로 이동
-        import shutil
+        # 3. YOLO 자동 생성 결과들 -> results 폴더로 이동
+        # 3-1. results 폴더가 있으면 그 안의 모든 내용 이동
+        yolo_results_dir = yolo_dir / "results"
+        if yolo_results_dir.exists():
+            for item in yolo_results_dir.iterdir():
+                target = results_dir / item.name
+                if target.exists():
+                    if target.is_file():
+                        target.unlink()
+                    else:
+                        shutil.rmtree(target)
+                shutil.move(str(item), str(target))
+                print(f"    Moved {item.name} to results/")
+        
+        # 3-2. 루트에 있는 시각화 파일들 (*.png, *.jpg) -> results 폴더로 이동
         for ext in ['*.png', '*.jpg']:
             for img_file in yolo_dir.glob(ext):
-                target = self.exp_manager.results_dir / img_file.name
+                target = results_dir / img_file.name
                 shutil.move(str(img_file), str(target))
                 print(f"    Moved {img_file.name} to results/")
         
-        # 4. results.csv -> results 폴더로 이동
+        # 4. results.csv -> results 폴더로 이동 (로그 파일로도 저장)
         results_csv = yolo_dir / "results.csv"
         if results_csv.exists():
-            target = self.exp_manager.results_dir / "yolo_results.csv"
-            results_csv.rename(target)
-            print(f"    Moved results.csv to results/")
+            # results 폴더에 복사
+            target_csv = results_dir / "yolo_results.csv"
+            shutil.copy2(str(results_csv), str(target_csv))
+            print(f"    Copied results.csv to results/yolo_results.csv")
         
         # 5. TensorBoard 로그 -> tensorboard 폴더로 이동
         tb_files = list(yolo_dir.glob("**/events.out.tfevents.*"))
         if tb_files:
-            import shutil
             for tb_file in tb_files:
                 target = self.exp_manager.tensorboard_dir / tb_file.name
                 shutil.move(str(tb_file), str(target))
@@ -347,18 +362,74 @@ class TrainRunner:
                 print(f"    Warning: Unexpected error removing {yolo_dir.name}: {e}")
         print(" Results organization completed!")
 
+    def _run_gdino_training(self):
+        """Grounding DINO 전용 학습 실행"""
+        import sys
+        import os
+        from pathlib import Path
+        
+        # 로그 파일 비활성화 (log 폴더 생성 안 함)
+        log_file = None
+        
+        print("\nStarting Grounding DINO training...")
+        print(f"Results will be saved to: {self.exp_manager.exp_dir}")
+        
+        # Grounding DINO 래퍼 사용
+        from ..models.gdino_model import GroundingDINOWrapper
+        
+        try:
+                model = GroundingDINOWrapper(self.config)
+                
+                # 학습 실행
+                results = model.train(
+                    output_dir=self.exp_manager.exp_dir,
+                    experiment_id=self.exp_manager.timestamp
+                )
+                
+                # 결과 저장
+                self.exp_manager.save_final_results(results)
+                
+                print(f"\n Training log saved to: {log_file}")
+                print(f"\n Grounding DINO training completed!")
+                print(f"   Best checkpoint: {results['best_checkpoint']}")
+                print(f"   Best val loss: {results['best_val_loss']:.4f}")
+                
+                return results
+                
+        except Exception as e:
+            # 에러 출력
+            print(f"\n❌ Grounding DINO training failed: {e}\n")
+            import traceback
+            traceback.print_exc()
+            raise
 
     def _run_lightning_training(self):
         """Lightning 기반 학습 실행 (DETR 등)"""
         import sys
         import os
         
-        # 1. 로그 파일 설정
-        log_file = self.exp_manager.log_dir / f"train_{self.exp_manager.timestamp}.log"
+        # 로그 파일 설정
+        log_dir = self.exp_manager.exp_dir / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "training.log"
         
-        # 2. 모델 & 데이터 생성
+        # 원본 stdout 저장
+        original_stdout = sys.stdout
+        original_stderr = sys.stderr
+        
+        # 터미널 출력을 파일과 콘솔에 동시에 출력하도록 설정
+        try:
+            f = open(log_file, 'w', encoding='utf-8')
+            sys.stdout = Tee(original_stdout, f)
+            sys.stderr = Tee(original_stderr, f)
+            log_file_handle = f
+        except Exception as e:
+            print(f"Warning: Could not create log file: {e}")
+            log_file = None
+            log_file_handle = None
+        
+        # 모델 & 데이터 생성
         print("\nCreating model and datasets...")
-        print(f"Log file: {log_file}")
         model, train_dataset, val_dataset, collate_fn = self._create_model_and_data()
         print(f"  Train samples: {len(train_dataset)}")
         print(f"  Val samples: {len(val_dataset)}")
@@ -383,103 +454,97 @@ class TrainRunner:
         if resume_ckpt:
             print(f"\nResuming from: {resume_ckpt}")
         
-        # 7. 학습 시작 (로그 파일에 저장)
-        print("\n" + "="*70)
-        print("TRAINING IN PROGRESS...")
-        print("="*70 + "\n")
-        
-        # 로그 파일 열기 (unbuffered 모드)
-        log_file_handle = open(log_file, 'w', encoding='utf-8', buffering=1)
-        
-        # Queue를 사용한 로그 기록 (별도 스레드)
-        from threading import Thread
-        from queue import Queue
-        import re
-        
-        log_queue = Queue()
-        log_running = True
-        
-        def remove_ansi_codes(text):
-            """ANSI escape code 제거"""
-            # ANSI escape sequence 제거 (색상, 커서 제어 등)
-            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-            return ansi_escape.sub('', text)
-        
-        def log_writer():
-            """별도 스레드에서 로그 파일에 기록 (ANSI 코드 제거)"""
-            while log_running or not log_queue.empty():
-                try:
-                    line = log_queue.get(timeout=0.1)
-                    # ANSI escape code 제거 후 파일에 기록
-                    clean_line = remove_ansi_codes(line)
-                    log_file_handle.write(clean_line)
-                    log_file_handle.flush()
-                except:
-                    continue
-        
-        # 로그 기록 스레드 시작
-        log_thread = Thread(target=log_writer, daemon=True)
-        log_thread.start()
-        
-        # Tee 클래스: 터미널에 출력하고 로그 큐에 추가
-        class Tee:
-            def __init__(self, original, log_queue):
-                self.original = original
-                self.log_queue = log_queue
-            
-            def write(self, obj):
-                # 터미널에 원본 출력 (색상 코드 포함)
-                self.original.write(obj)
-                self.original.flush()
-                # 로그 큐에 추가 (나중에 ANSI 코드 제거됨)
-                if obj:
-                    self.log_queue.put(obj)
-            
-            def flush(self):
-                self.original.flush()
-            
-            def isatty(self):
-                return self.original.isatty() if hasattr(self.original, 'isatty') else False
-            
-            def __getattr__(self, name):
-                return getattr(self.original, name)
-        
-        # stdout과 stderr를 Tee로 교체
-        original_stdout = sys.stdout
-        original_stderr = sys.stderr
-        
+        # 학습 시작
         try:
-            sys.stdout = Tee(original_stdout, log_queue)
-            sys.stderr = Tee(original_stderr, log_queue)
-            
-            # Python의 stdout 버퍼링 비활성화
-            os.environ['PYTHONUNBUFFERED'] = '1'
+            print("\n" + "="*70)
+            print("TRAINING IN PROGRESS...")
+            print("="*70 + "\n")
             
             trainer.fit(model, train_loader, val_loader, ckpt_path=resume_ckpt)
+            
+            # 8. 결과 저장
+            checkpoint_callback = callbacks[0]  # ModelCheckpoint
+            results = {
+                'best_checkpoint': str(checkpoint_callback.best_model_path),
+                'best_val_loss': float(checkpoint_callback.best_model_score) 
+                                if checkpoint_callback.best_model_score else None,
+            }
+            self.exp_manager.save_final_results(results)
+            
+            # 9. 완료 메시지
+            print("\n" + "="*70)
+            print("TRAINING COMPLETED!")
+            print("="*70)
+            print(f"  Experiment: {self.exp_manager.exp_dir}")
+            print(f"  Best checkpoint: {checkpoint_callback.best_model_path}")
+            if log_file:
+                print(f"  Training log: {log_file}")
+            print("="*70 + "\n")
         finally:
-            # 원래 stdout/stderr로 복원
-            sys.stdout = original_stdout
-            sys.stderr = original_stderr
-            # 로그 기록 중지
-            log_running = False
-            log_thread.join(timeout=2)
-            log_file_handle.close()
+            # 로그 파일 정리 (stdout/stderr 원래대로 복구)
+            if log_file_handle:
+                sys.stdout = original_stdout
+                sys.stderr = original_stderr
+                log_file_handle.close()
+                if log_file:
+                    original_stdout.write(f"\nTraining log saved to: {log_file}\n")
+    
+    def _run_florence2_training(self):
+        """Florence-2 전용 fine-tuning 실행"""
+        from ..models.florence2_finetuned import Florence2Finetuned
         
-        print(f"\n✅ Training log saved to: {log_file}")
+        print("\nStarting Florence-2 fine-tuning...")
         
-        # 8. 결과 저장
-        checkpoint_callback = callbacks[0]  # ModelCheckpoint
-        results = {
-            'best_checkpoint': str(checkpoint_callback.best_model_path),
-            'best_val_loss': float(checkpoint_callback.best_model_score) 
-                            if checkpoint_callback.best_model_score else None,
-        }
-        self.exp_manager.save_final_results(results)
+        # Training parameters
+        num_epochs = self.config['training'].get('epochs', 100)
+        batch_size = self.config['data'].get('batch_size', 24)
+        learning_rate = self.config['model'].get('learning_rate', 1e-5)
+        weight_decay = self.config['model'].get('weight_decay', 0.0005)
         
-        # 9. 완료 메시지
-        print("\n" + "="*70)
-        print("TRAINING COMPLETED!")
-        print("="*70)
-        print(f"  Experiment: {self.exp_manager.exp_dir}")
-        print(f"  Best checkpoint: {checkpoint_callback.best_model_path}")
-        print("="*70 + "\n")
+        # LoRA parameters
+        use_lora = self.config.get('florence2', {}).get('use_lora', True)
+        lora_r = self.config.get('florence2', {}).get('lora_r', 8)
+        lora_alpha = self.config.get('florence2', {}).get('lora_alpha', 8)
+        
+        # Advanced settings
+        use_amp = self.config.get('training', {}).get('amp', True)
+        gradient_clip_val = self.config.get('training', {}).get('gradient_clip_val', 1.0)
+        accumulate_grad_batches = self.config.get('training', {}).get('accumulate_grad_batches', 1)  
+        
+        # Device
+        device = self.config.get('device', 'cuda')
+        
+        # Output directory (checkpoints 폴더에 저장)
+        checkpoint_dir = self.exp_manager.checkpoint_dir
+        
+        print(f"  Epochs: {num_epochs}")
+        print(f"  Batch size: {batch_size}")
+        print(f"  Learning rate: {learning_rate}")
+        print(f"  Weight decay: {weight_decay}")
+        print(f"  AMP enabled: {use_amp}")
+        print(f"  Gradient clip value: {gradient_clip_val}")      
+        print(f"  Accumulate grad batches: {accumulate_grad_batches}") 
+        print(f"  LoRA: {use_lora}")
+        if use_lora:
+            print(f"  LoRA rank: {lora_r}, alpha: {lora_alpha}")
+        print(f"  Checkpoint dir: {checkpoint_dir}\n")
+        
+        # Run training
+        Florence2Finetuned.train_model(
+            config=self.config,
+            output_dir=str(checkpoint_dir),
+            num_epochs=num_epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            use_lora=use_lora,
+            lora_r=lora_r,
+            lora_alpha=lora_alpha,
+            use_amp=use_amp,
+            gradient_clip_val=gradient_clip_val,          
+            accumulate_grad_batches=accumulate_grad_batches, 
+            device=device
+        )
+        
+        print(f"\n Florence-2 training completed!")
+        print(f"  Checkpoints saved to: {checkpoint_dir}")

@@ -1,5 +1,5 @@
 experiment:
-  name: detr_tomato_3class_exp001
+  name: Null
   seed: 42
   save_dir: exp
   log_image_enabled: true
@@ -12,9 +12,9 @@ model:
   score_threshold: 0.5
 
   # Optimizer settings
-  learning_rate: 0.0001
-  lr_backbone: 1.0e-05
-  weight_decay: 0.0001
+  learning_rate: 0.0003
+  lr_backbone: 3.0e-05
+  weight_decay: 0.0005
   
   # Detection settings
   num_queries: 100  # DETR의 object queries 수
@@ -31,7 +31,7 @@ model:
   dropout: 0.1
 
 data:
-  dataset_name: TomatOD_COCO_3
+  dataset_name: TomatOD_3
   num_classes: 3
   class_names:
     - fully-ripe
@@ -39,10 +39,10 @@ data:
     - unripe
   
   # Paths
-  data_root: data/TomatOD_COCO_3
-  train_dir: data/TomatOD_COCO_3/train
-  val_dir: data/TomatOD_COCO_3/val
-  test_dir: data/TomatOD_COCO_3/test
+  data_root: data/TomatOD_3
+  train_dir: data/TomatOD_3/train
+  val_dir: data/TomatOD_3/val
+  test_dir: data/TomatOD_3/test
 
   # Annotations
   train_ann_file: custom_train.json
@@ -51,7 +51,7 @@ data:
   
   # DataLoader settings
   batch_size: 8
-  num_workers: 0  # Windows에서는 0 권장
+  num_workers: 8  
   pin_memory: true
   
   # Image preprocessing
@@ -80,7 +80,7 @@ trainer:
   check_val_every_n_epoch: 1
 
   # Gradient settings
-  accumulate_grad_batches: 4  # 실효 배치: 8 × 4 = 32
+  accumulate_grad_batches: 3  # 실효 배치: 8 × 3 = 24
   gradient_clip_val: 0.1
   gradient_clip_algorithm: norm
   
@@ -122,6 +122,12 @@ evaluation:
   save_predictions: true
   save_confusion_matrix: true
   save_per_class_metrics: true
+
+
+test:
+  # Test/Inference visualization settings
+  box_color_mode: model  # 'class' (class-specific colors) or 'model' (model-specific color)
+  show_gt: false
 
 
 logging:

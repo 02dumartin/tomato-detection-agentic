@@ -1,24 +1,27 @@
 experiment:
-  name: detr_tomato_1class_exp001
+  name: Null
   seed: 42
   save_dir: exp
   log_image_enabled: true
-  log_image_interval: 5
+  log_image_interval: 5  # validation 시 N epoch마다 이미지 저장
 
 model:
   arch_name: detr
   pretrained_path: facebook/detr-resnet-50
   num_labels: 1
   score_threshold: 0.5
+
   # Optimizer settings
-  learning_rate: 0.0001
-  lr_backbone: 0.00001
-  weight_decay: 0.0001
+  learning_rate: 0.0003
+  lr_backbone: 3.0e-05
+  weight_decay: 0.0005
+  
   # Detection settings
-  num_queries: 100
+  num_queries: 100  # DETR의 object queries 수
   bbox_loss_coef: 5.0
   giou_loss_coef: 2.0
   class_loss_coef: 1.0
+  
   # Architecture details (선택사항)
   hidden_dim: 256
   nheads: 8
@@ -28,27 +31,27 @@ model:
   dropout: 0.1
 
 data:
-  dataset_name: TomatOD_COCO_1
+  dataset_name: TomatOD_1
   num_classes: 1
   class_names:
     - tomato
-
+  
   # Paths
-  data_root: data/TomatOD_COCO_1
-  train_dir: data/TomatOD_COCO_1/train
-  val_dir: data/TomatOD_COCO_1/val
-  test_dir: data/TomatOD_COCO_1/test
+  data_root: data/TomatOD_1
+  train_dir: data/TomatOD_1/train
+  val_dir: data/TomatOD_1/val
+  test_dir: data/TomatOD_1/test
 
   # Annotations
   train_ann_file: custom_train.json
   val_ann_file: custom_val.json
   test_ann_file: custom_test.json
-
+  
   # DataLoader settings
   batch_size: 8
-  num_workers: 0
+  num_workers: 8
   pin_memory: true
-
+  
   # Image preprocessing
   image_size: 800
   
@@ -69,14 +72,17 @@ trainer:
   accelerator: gpu
   devices: 1
   precision: 16-mixed
-  enable_progress_bar: true
-  log_every_n_steps: 10
-  val_check_interval: 1.0
+  enable_progress_bar: false  # Progress bar 비활성화 (한 줄 로그를 위해)
+  log_every_n_steps: 999999  # 매우 큰 값으로 설정하여 epoch당 1번만 로그
+  val_check_interval: 1.0  # 매 epoch마다 validation
   check_val_every_n_epoch: 1
+
   # Gradient settings
-  accumulate_grad_batches: 4
+  accumulate_grad_batches: 3  # 실효 배치: 8 × 3 = 24
   gradient_clip_val: 0.1
   gradient_clip_algorithm: norm
+  
+  
   # Callbacks
   early_stopping:
     monitor: val_loss
@@ -90,18 +96,37 @@ trainer:
     filename: best-{epoch:02d}-{val_loss:.2f}
     auto_insert_metric_name: false
 
+
 evaluation:
   score_threshold: 0.5
   iou_threshold: 0.5
   nms_threshold: 0.5
   max_detections: 100
+  batch_size: 8  # 평가용 배치 크기 (학습과 다를 수 있음)
+  
+  # 저장할 메트릭들
   metrics:
-    - map
+    - map  # mean Average Precision
     - map_50
     - map_75
     - mar_1
     - mar_10
     - mar_100
+    - precision
+    - recall
+    - f1_score
+  
+  # 시각화 옵션
+  save_predictions: true
+  save_confusion_matrix: true
+  save_per_class_metrics: true
+
+
+test:
+  # Test/Inference visualization settings
+  box_color_mode: model  # 'class' (class-specific colors) or 'model' (model-specific color)
+  show_gt: false
+
 
 logging:
   tensorboard:
@@ -119,3 +144,4 @@ hardware:
   amp_enabled: true
   cudnn_benchmark: true
   deterministic: false
+

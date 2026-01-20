@@ -1,6 +1,6 @@
 # yolov11 3class 
 experiment:
-  name: yolo11_tomato_3class_exp001
+  name: null  
   seed: 42
   save_dir: exp
   log_image_enabled: true
@@ -9,7 +9,7 @@ experiment:
 model:
   arch_name: yolov11
   model_size: m  # n(nano), s(small), m(medium), l(large), x(xlarge)
-  pretrained_path: yolo11m.pt
+  pretrained_path: weights/yolo11m.pt
   num_classes: 3
   confidence_threshold: 0.5
   
@@ -25,7 +25,7 @@ model:
   dfl: 1.5           # dfl loss gain
 
 data:
-  dataset_name: TomatOD_YOLO_3
+  dataset_name: TomatOD_3_YOLO
   num_classes: 3
   class_names:
     - fully-ripe
@@ -33,13 +33,13 @@ data:
     - unripe
   
   # Paths (YOLO 형식)
-  data_root: data/TomatOD_YOLO_3
-  train_dir: data/TomatOD_YOLO_3/train/images
-  val_dir: data/TomatOD_YOLO_3/val/images
-  test_dir: data/TomatOD_YOLO_3/test/images
+  data_root: data/TomatOD_3_YOLO
+  train_dir: data/TomatOD_3_YOLO/train/images
+  val_dir: data/TomatOD_3_YOLO/val/images
+  test_dir: data/TomatOD_3_YOLO/test/images
   
   # YOLO data.yaml 파일 경로
-  data_yaml: data/TomatOD_YOLO_3/data.yaml
+  data_yaml: data/TomatOD_3_YOLO/data.yaml
   
   # DataLoader settings
   batch_size: 24
@@ -90,7 +90,7 @@ training:
   plots: true        # save plots and images during train/val
   
   # Advanced settings
-  amp: true          # Automatic Mixed Precision (AMP) training
+  amp: true        # Automatic Mixed Precision (AMP) training
   fraction: 1.0      # dataset fraction to train on (default is 1.0, all images in train set)
   profile: false     # profile ONNX and TensorRT speeds during training for loggers
   freeze: null       # freeze first n layers, or freeze list of layer indices during training
@@ -159,6 +159,11 @@ logging:
   # Other loggers
   clearml: false
   comet: false
+
+test:
+  # Test/Inference visualization settings
+  show_gt: false  # Show ground truth boxes
+  box_color_mode: model  # 'class' (class-specific colors) or 'model' (model-specific color)
 
 hardware:
   device: cuda

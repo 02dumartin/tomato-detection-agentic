@@ -1,14 +1,12 @@
 """YOLO 모델 전용 평가"""
-import json
 import shutil
 import numpy as np
 import torch
-import pandas as pd
 from pathlib import Path
 from typing import Dict
 from ultralytics import YOLO
 
-from ..metrics.model_complexity import calculate_model_complexity
+from .metrics import calculate_model_complexity
 from .result_saver import save_summary_metrics
 
 
@@ -24,6 +22,60 @@ class YOLOEvaluator:
         self.output_dir = output_dir
         self.score_threshold = score_threshold
         self.iou_threshold = iou_threshold
+    
+    def _extract_yolo_class_ap(self, results, attr_name: str, class_names: list) -> Dict:
+        """YOLO results에서 클래스별 AP 추출 헬퍼 함수"""
+        class_ap = {}
+        
+        # results.box에서 추출 시도
+        if hasattr(results, 'box') and hasattr(results.box, attr_name):
+            ap_data = getattr(results.box, attr_name)
+            if ap_data is not None:
+                if isinstance(ap_data, (list, np.ndarray, torch.Tensor)):
+                    ap_list = ap_data.tolist() if hasattr(ap_data, 'tolist') else list(ap_data)
+                    for i, ap in enumerate(ap_list):
+                        if i < len(class_names):
+                            class_ap[class_names[i]] = float(ap)
+                    return class_ap
+        
+        # results에서 직접 추출 시도
+        if hasattr(results, attr_name):
+            ap_data = getattr(results, attr_name)
+            if ap_data is not None:
+                if isinstance(ap_data, (list, np.ndarray, torch.Tensor)):
+                    ap_list = ap_data.tolist() if hasattr(ap_data, 'tolist') else list(ap_data)
+                    for i, ap in enumerate(ap_list):
+                        if i < len(class_names):
+                            class_ap[class_names[i]] = float(ap)
+                    return class_ap
+        
+        # 대체 속성명 시도 (maps50의 경우)
+        if attr_name == 'maps50':
+            for alt_name in ['ap50', 'ap_class_50', 'class_map50']:
+                if hasattr(results, 'box') and hasattr(results.box, alt_name):
+                    ap_data = getattr(results.box, alt_name)
+                    if ap_data is not None:
+                        if isinstance(ap_data, (list, np.ndarray, torch.Tensor)):
+                            ap_list = ap_data.tolist() if hasattr(ap_data, 'tolist') else list(ap_data)
+                            for i, ap in enumerate(ap_list):
+                                if i < len(class_names):
+                                    class_ap[class_names[i]] = float(ap)
+                            return class_ap
+        
+        # maps75의 경우
+        if attr_name == 'maps75':
+            for alt_name in ['ap75', 'ap_class_75', 'class_map75']:
+                if hasattr(results, 'box') and hasattr(results.box, alt_name):
+                    ap_data = getattr(results.box, alt_name)
+                    if ap_data is not None:
+                        if isinstance(ap_data, (list, np.ndarray, torch.Tensor)):
+                            ap_list = ap_data.tolist() if hasattr(ap_data, 'tolist') else list(ap_data)
+                            for i, ap in enumerate(ap_list):
+                                if i < len(class_names):
+                                    class_ap[class_names[i]] = float(ap)
+                            return class_ap
+        
+        return class_ap
     
     def evaluate(self) -> Dict:
         """
@@ -139,82 +191,221 @@ class YOLOEvaluator:
         
         # 클래스별 AP 추출
         class_names = self.config['data']['class_names']
-        class_ap_50 = {}
-        class_ap_50_95 = {}
-        class_ap_75 = {}
+        class_ap_50 = self._extract_yolo_class_ap(results, 'maps50', class_names)
+        class_ap_50_95 = self._extract_yolo_class_ap(results, 'maps', class_names)
+        class_ap_75 = self._extract_yolo_class_ap(results, 'maps75', class_names)
         
-        # YOLO results에서 클래스별 AP 추출
-        # mAP@0.5:0.95 추출
-        if hasattr(results.box, 'maps') and results.box.maps is not None:
-            maps = results.box.maps
-            if isinstance(maps, (list, np.ndarray, torch.Tensor)):
-                maps = maps.tolist() if hasattr(maps, 'tolist') else list(maps)
-                for i, ap in enumerate(maps):
-                    if i < len(class_names):
-                        class_ap_50_95[class_names[i]] = float(ap)
+        # CA-mAP 계산 (predictions.json이 있는 경우) - 먼저 초기화
+        ca_metrics = {}
+        yolo_val_dir = self.output_dir / "yolo_val_results"
         
-        # mAP@0.5 추출 시도
-        if hasattr(results.box, 'maps50'):
-            maps50 = results.box.maps50
-            if maps50 is not None:
-                if isinstance(maps50, (list, np.ndarray, torch.Tensor)):
-                    maps50 = maps50.tolist() if hasattr(maps50, 'tolist') else list(maps50)
-                    for i, ap in enumerate(maps50):
-                        if i < len(class_names):
-                            class_ap_50[class_names[i]] = float(ap)
+        # predictions.json 찾기
+        predictions_json = None
+        for json_file in yolo_val_dir.rglob("predictions.json"):
+            predictions_json = json_file
+            break
         
-        if not class_ap_50 and hasattr(results, 'maps50'):
-            maps50 = results.maps50
-            if maps50 is not None:
-                if isinstance(maps50, (list, np.ndarray, torch.Tensor)):
-                    maps50 = maps50.tolist() if hasattr(maps50, 'tolist') else list(maps50)
-                    for i, ap in enumerate(maps50):
-                        if i < len(class_names):
-                            class_ap_50[class_names[i]] = float(ap)
-        
-        # mAP@0.75 추출 시도
-        if hasattr(results.box, 'maps75'):
-            maps75 = results.box.maps75
-            if maps75 is not None:
-                if isinstance(maps75, (list, np.ndarray, torch.Tensor)):
-                    maps75 = maps75.tolist() if hasattr(maps75, 'tolist') else list(maps75)
-                    for i, ap in enumerate(maps75):
-                        if i < len(class_names):
-                            class_ap_75[class_names[i]] = float(ap)
-        
-        if not class_ap_75 and hasattr(results, 'maps75'):
-            maps75 = results.maps75
-            if maps75 is not None:
-                if isinstance(maps75, (list, np.ndarray, torch.Tensor)):
-                    maps75 = maps75.tolist() if hasattr(maps75, 'tolist') else list(maps75)
-                    for i, ap in enumerate(maps75):
-                        if i < len(class_names):
-                            class_ap_75[class_names[i]] = float(ap)
-        
-        # 방법 3: results.box 객체의 속성 확인 및 시도
-        if not class_ap_50 or not class_ap_75:
-            # 가능한 속성명들 시도
-            for attr_name in ['maps50', 'ap50', 'ap_class_50', 'class_map50']:
-                if hasattr(results.box, attr_name):
-                    attr_value = getattr(results.box, attr_name)
-                    if attr_value is not None and not class_ap_50:
-                        if isinstance(attr_value, (list, np.ndarray, torch.Tensor)):
-                            attr_value = attr_value.tolist() if hasattr(attr_value, 'tolist') else list(attr_value)
-                            for i, ap in enumerate(attr_value):
-                                if i < len(class_names):
-                                    class_ap_50[class_names[i]] = float(ap)
+        if predictions_json and predictions_json.exists():
+            print(f"\n  Found predictions.json: {predictions_json}")
+            try:
+                from pycocotools.coco import COCO
+                from pycocotools.cocoeval import COCOeval
+                import json
+                import copy
+                import tempfile
+                import os
+                
+                # GT 파일 경로
+                # YOLO 형식 데이터셋의 경우 원본 COCO 형식 데이터셋에서 GT 파일 찾기
+                data_root_str = str(self.config['data']['data_root'])
+                data_root = Path(data_root_str)
+                
+                # data_root가 _YOLO로 끝나면 원본 데이터셋 경로로 변경
+                if data_root_str.endswith('_YOLO'):
+                    original_data_root = data_root_str.replace('_YOLO', '')
+                    data_root = Path(original_data_root)
+                    print(f"  Using original COCO dataset for GT: {data_root}")
+                
+                gt_file = data_root / self.split / f"custom_{self.split}.json"
+                
+                print(f"  Looking for GT file: {gt_file}")
+                print(f"  GT file exists: {gt_file.exists()}")
+                if not gt_file.exists():
+                    print(f"  Warning: GT file not found at {gt_file}")
+                    print(f"  Trying alternative paths...")
+                    # 대체 경로 시도
+                    alt_paths = [
+                        Path(self.config['data']['data_root'].replace('_YOLO', '')) / self.split / f"custom_{self.split}.json",
+                        Path('data') / data_root.name.replace('_YOLO', '') / self.split / f"custom_{self.split}.json",
+                    ]
+                    for alt_path in alt_paths:
+                        if alt_path.exists():
+                            gt_file = alt_path
+                            print(f"  Found GT file at alternative path: {gt_file}")
                             break
-            
-            for attr_name in ['maps75', 'ap75', 'ap_class_75', 'class_map75']:
-                if hasattr(results.box, attr_name):
-                    attr_value = getattr(results.box, attr_name)
-                    if attr_value is not None and not class_ap_75:
-                        if isinstance(attr_value, (list, np.ndarray, torch.Tensor)):
-                            attr_value = attr_value.tolist() if hasattr(attr_value, 'tolist') else list(attr_value)
-                            for i, ap in enumerate(attr_value):
-                                if i < len(class_names):
-                                    class_ap_75[class_names[i]] = float(ap)
-                            break
+                
+                if gt_file.exists():
+                    print("\nCalculating Class-Agnostic mAP (CA-mAP)...")
+                    
+                    # GT 로드
+                    coco_gt = COCO(str(gt_file))
+                    
+                    # COCO dataset에 필수 키가 없으면 추가
+                    if 'info' not in coco_gt.dataset:
+                        coco_gt.dataset['info'] = {
+                            'description': 'COCO format dataset',
+                            'version': '1.0',
+                            'year': 2024
+                        }
+                    if 'licenses' not in coco_gt.dataset:
+                        coco_gt.dataset['licenses'] = []
+                    
+                    # annotations에 'iscrowd' 필드가 없으면 추가
+                    for ann_id in coco_gt.anns:
+                        ann = coco_gt.anns[ann_id]
+                        if 'iscrowd' not in ann:
+                            ann['iscrowd'] = 0
+                    
+                    # 예측 결과 로드
+                    with open(predictions_json, 'r') as f:
+                        all_predictions = json.load(f)
+                    
+                    print(f"  Loaded {len(all_predictions)} predictions from {predictions_json}")
+                    
+                    if len(all_predictions) == 0:
+                        print(f"  Warning: No predictions found in {predictions_json}")
+                        raise ValueError("Empty predictions list")
+                    
+                    # GT COCO의 images에서 file_name → image_id 매핑 생성
+                    # file_name/basename/stem 모두 매핑해서 string image_id 케이스 흡수
+                    file_name_to_id = {}
+                    for img_id, img_info in coco_gt.imgs.items():
+                        file_name = img_info.get('file_name', '')
+                        if not file_name:
+                            continue
+                        img_id_int = int(img_id)
+                        file_name_to_id[file_name] = img_id_int
+                        file_name_to_id[Path(file_name).name] = img_id_int
+                        file_name_to_id[Path(file_name).stem] = img_id_int
+                    
+                    print(f"  Created file_name → image_id mapping: {len(file_name_to_id)} images")
+                    
+                    # 첫 번째 예측 확인
+                    if len(all_predictions) > 0:
+                        first_pred = all_predictions[0]
+                        pred_img_id = first_pred.get('image_id')
+                        pred_file_name = first_pred.get('file_name', '')
+                        print(f"  First prediction: image_id={pred_img_id} (type: {type(pred_img_id).__name__}), file_name={pred_file_name}")
+                    
+                    # 모든 예측의 category_id를 0으로 변경하고 image_id를 numeric id로 교체
+                    ca_predictions = []
+                    unmapped_count = 0
+                    for pred in all_predictions:
+                        ca_pred = pred.copy()
+                        ca_pred['category_id'] = 0  # 모든 클래스를 0으로 통합
+                        
+                        # image_id를 file_name으로 찾아서 numeric id로 교체
+                        file_name = ca_pred.get('file_name', '')
+                        original_img_id = ca_pred.get('image_id')
+                        
+                        mapped_id = None
+                        
+                        # 1. file_name으로 직접 매핑 시도
+                        if file_name and file_name in file_name_to_id:
+                            mapped_id = file_name_to_id[file_name]
+                        # 2. image_id가 문자열인 경우 다양한 형태로 매핑 시도
+                        elif isinstance(original_img_id, str):
+                            if original_img_id in file_name_to_id:
+                                mapped_id = file_name_to_id[original_img_id]
+                            else:
+                                stem = Path(original_img_id).stem
+                                if stem in file_name_to_id:
+                                    mapped_id = file_name_to_id[stem]
+                        # 3. 이미 numeric id인 경우
+                        elif isinstance(original_img_id, int):
+                            mapped_id = original_img_id
+                        
+                        if mapped_id is not None:
+                            ca_pred['image_id'] = mapped_id
+                        else:
+                            # 매핑 실패
+                            unmapped_count += 1
+                            if unmapped_count <= 3:  # 처음 3개만 경고
+                                print(f"  Warning: Could not map image_id for prediction: image_id={original_img_id}, file_name={file_name}")
+                            continue  # 매핑 실패한 예측은 건너뛰기
+                        
+                        ca_predictions.append(ca_pred)
+                    
+                    if unmapped_count > 0:
+                        print(f"  Warning: {unmapped_count} predictions could not be mapped to GT image_ids")
+                    
+                    print(f"  Converted {len(ca_predictions)} predictions to class-agnostic format (mapped to numeric image_ids)")
+                    
+                    # CA 예측 결과 저장
+                    ca_predictions_file = yolo_val_dir / "predictions_ca.json"
+                    with open(ca_predictions_file, 'w') as f:
+                        json.dump(ca_predictions, f)
+                    
+                    # GT의 모든 category_id를 0으로 변경한 복사본 생성
+                    ca_gt_dataset = copy.deepcopy(coco_gt.dataset)
+                    for ann in ca_gt_dataset['annotations']:
+                        ann['category_id'] = 0
+                    
+                    # 카테고리를 하나로 통일 (tomato로 이름 변경)
+                    if len(ca_gt_dataset['categories']) > 0:
+                        ca_gt_dataset['categories'] = [{
+                            'id': 0,
+                            'name': 'tomato',
+                            'supercategory': 'none'
+                        }]
+                    
+                    # 임시 GT 파일 생성
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                        json.dump(ca_gt_dataset, f)
+                        temp_gt_file = f.name
+                    
+                    # CA COCO 객체 생성 및 평가
+                    print(f"  Creating COCO objects for CA-mAP calculation...")
+                    ca_coco_gt = COCO(temp_gt_file)
+                    print(f"  GT annotations: {len(ca_coco_gt.anns)}")
+                    
+                    ca_coco_dt = ca_coco_gt.loadRes(str(ca_predictions_file))
+                    print(f"  DT predictions: {len(ca_coco_dt.anns)}")
+                    
+                    ca_coco_eval = COCOeval(ca_coco_gt, ca_coco_dt, 'bbox')
+                    print(f"  Running COCOeval...")
+                    ca_coco_eval.evaluate()
+                    ca_coco_eval.accumulate()
+                    ca_coco_eval.summarize()
+                    
+                    print(f"  COCOeval stats: {ca_coco_eval.stats}")
+                    
+                    ca_metrics = {
+                        'ca_map': float(ca_coco_eval.stats[0]),
+                        'ca_map_50': float(ca_coco_eval.stats[1]),
+                        'ca_map_75': float(ca_coco_eval.stats[2]),
+                    }
+                    
+                    print(f"  CA-mAP@0.50:      {ca_metrics['ca_map_50']:.4f}")
+                    print(f"  CA-mAP@0.50:0.95: {ca_metrics['ca_map']:.4f}")
+                    print(f"  CA-mAP@0.75:      {ca_metrics['ca_map_75']:.4f}")
+                    
+                    # 임시 파일 삭제
+                    if os.path.exists(temp_gt_file):
+                        os.unlink(temp_gt_file)
+            except Exception as e:
+                import traceback
+                print(f"  Warning: Could not calculate CA-mAP: {e}")
+                print(f"  Exception details:")
+                traceback.print_exc()
+                ca_metrics = {
+                    'ca_map': 0.0,
+                    'ca_map_50': 0.0,
+                    'ca_map_75': 0.0,
+                }
+        else:
+            print(f"  Warning: predictions.json not found in {yolo_val_dir}")
+            print(f"  CA-mAP calculation skipped (predictions.json required)")
         
         # 결과 출력
         print("\n" + "="*70)
@@ -226,6 +417,14 @@ class YOLOEvaluator:
             print(f"mAP@0.75:      {results.box.map75:.4f}")
         print(f"Precision:     {results.box.mp:.4f}")
         print(f"Recall:        {results.box.mr:.4f}")
+        
+        # CA-mAP 출력 (계산된 경우)
+        if ca_metrics:
+            print("\n[Class-Agnostic mAP (Localization)]")
+            print(f"CA-mAP@0.50:      {ca_metrics.get('ca_map_50', 0.0):.4f}")
+            print(f"CA-mAP@0.50:0.95: {ca_metrics.get('ca_map', 0.0):.4f}")
+            print(f"CA-mAP@0.75:      {ca_metrics.get('ca_map_75', 0.0):.4f}")
+        
         print("="*70)
         
         # 클래스별 AP 출력
@@ -265,6 +464,10 @@ class YOLOEvaluator:
                 'map_50': float(results.box.map50),
                 'map': float(results.box.map),
                 'map_75': float(results.box.map75) if hasattr(results.box, 'map75') else None,
+                # CA-mAP 추가
+                'ca_map_50': ca_metrics.get('ca_map_50', 0.0),
+                'ca_map': ca_metrics.get('ca_map', 0.0),
+                'ca_map_75': ca_metrics.get('ca_map_75', 0.0),
             },
             'detailed_statistics': {
                 'total_statistics': {
@@ -322,4 +525,3 @@ class YOLOEvaluator:
         print("="*70 + "\n")
         
         return results_dict
-

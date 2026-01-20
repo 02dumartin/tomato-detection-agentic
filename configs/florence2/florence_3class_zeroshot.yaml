@@ -1,0 +1,95 @@
+# Florence-2 Zero-shot Configuration
+# Enhanced prompt engineering for tomato detection
+
+experiment:
+  name: Null
+  seed: 42
+  save_dir: exp
+  log_image_enabled: true
+  log_image_interval: 5
+
+model:
+  arch_name: florence2
+  model_name: microsoft/Florence-2-base
+  num_labels: 3
+
+florence2:
+  mode: zeroshot
+  model_name: microsoft/Florence-2-base
+  
+  # Enhanced Zero-shot 설정
+  enhanced: true
+  
+  # Generation 파라미터
+  generation:
+    max_new_tokens: 1024
+    num_beams: 1
+    do_sample: false
+    use_cache: false
+    temperature: 1.0
+  
+  # NMS 설정
+  nms_threshold: 0.5
+  conf_threshold: 0.0
+  
+  # 클래스 설정
+  classes:
+    - fully_ripe
+    - semi_ripe
+    - unripe
+  
+  # 클래스별 프롬프트 (자동으로 모델에 정의됨)
+  # fully_ripe: bright red ripe tomato, crimson red tomato, etc.
+  # semi_ripe: orange yellow tomato, yellowish tomato, etc.
+  # unripe: dark green unripe tomato, immature green tomato, etc.
+
+data:
+  dataset_name: TomatOD_3
+  num_classes: 3
+  class_names:
+    - fully_ripe
+    - semi_ripe
+    - unripe
+  
+  # Paths
+  data_root: data/TomatOD_3
+  train_dir: data/TomatOD_3/train
+  val_dir: data/TomatOD_3/val
+  test_dir: data/TomatOD_3/test
+
+  # Annotations
+  train_ann_file: custom_train.json
+  val_ann_file: custom_val.json
+  test_ann_file: custom_test.json
+  
+  # DataLoader settings
+  batch_size: 1
+  num_workers: 0
+  pin_memory: false
+
+evaluation:
+  score_threshold: 0.0
+  iou_threshold: 0.5
+  nms_threshold: 0.5
+  max_detections: 100
+  batch_size: 1
+
+test:
+  show_gt: false
+  box_color_mode: class
+
+# 디바이스 설정
+device: cuda
+
+# 로깅
+logging:
+  verbose: true
+  tensorboard:
+    enabled: false
+  csv:
+    enabled: false
+
+hardware:
+  device: cuda
+  amp_enabled: false
+

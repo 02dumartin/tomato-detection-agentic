@@ -47,14 +47,14 @@ class TomatOD3Meta:
             ann_file = config['data'].get(f'{split}_ann_file', f'custom_{split}.json')
             
             return {
-                'img_folder': os.path.join(split_dir, "images"),
+                'img_folder': os.path.join(split_dir, "img"),
                 'ann_file': os.path.join(split_dir, ann_file)
             }
         else:
             # 기본 경로 (상대 경로)
             split_dir = os.path.join(cls.DATA_ROOT, split)
             return {
-                'img_folder': os.path.join(split_dir, "images"),
+                'img_folder': os.path.join(split_dir, "img"),
                 'ann_file': os.path.join(split_dir, f"custom_{split}.json")
             }
 

@@ -1,43 +1,77 @@
-batch_size = 1
-modelname = "groundingdino"
-backbone = "swin_T_224_1k"
-position_embedding = "sine"
-pe_temperatureH = 20
-pe_temperatureW = 20
-return_interm_indices = [1, 2, 3]
-backbone_freeze_keywords = None
-enc_layers = 6
-dec_layers = 6
-pre_norm = False
-dim_feedforward = 2048
-hidden_dim = 256
-dropout = 0.0
-nheads = 8
-num_queries = 900
-query_dim = 4
-num_patterns = 0
-num_feature_levels = 4
-enc_n_points = 4
-dec_n_points = 4
-two_stage_type = "standard"
-two_stage_bbox_embed_share = False
-two_stage_class_embed_share = False
-transformer_activation = "relu"
-dec_pred_bbox_embed_share = True
-dn_box_noise_scale = 1.0
-dn_label_noise_ratio = 0.5
-dn_label_coef = 1.0
-dn_bbox_coef = 1.0
-embed_init_tgt = True
-dn_labelbook_size = 2000
-max_text_len = 256
-text_encoder_type = "bert-base-uncased"
-use_text_enhancer = True
-use_fusion_layer = True
-use_checkpoint = True
-use_transformer_ckpt = True
-use_text_cross_attention = True
-text_dropout = 0.0
-fusion_dropout = 0.0
-fusion_droppath = 0.1
-sub_sentence_present = True
+experiment:
+  name: gdino_tomato_3class_exp001
+  seed: 42
+  save_dir: exp
+  log_image_enabled: true
+  log_image_interval: 5
+
+model:
+  arch_name: groundingdino  # 또는 'gdino', 'GroundingDINO'
+  model_name: IDEA-Research/grounding-dino-base  # Hugging Face 모델 이름
+  # 옵션: 'IDEA-Research/grounding-dino-tiny', 'IDEA-Research/grounding-dino-base', 'IDEA-Research/grounding-dino-swint-ogc'
+  
+  # Optimizer settings
+  learning_rate: 1.0e-05
+  weight_decay: 0.0001
+
+data:
+  dataset_name: TomatOD_COCO_3
+  num_classes: 3
+  class_names:
+    - fully-ripe
+    - semi-ripe
+    - unripe
+  
+  # Paths
+  data_root: data/TomatOD_COCO_3
+  train_dir: data/TomatOD_COCO_3/train
+  val_dir: data/TomatOD_COCO_3/val
+  test_dir: data/TomatOD_COCO_3/test
+
+  # Annotations
+  train_ann_file: custom_train.json
+  val_ann_file: custom_val.json
+  test_ann_file: custom_test.json
+  
+  # DataLoader settings
+  batch_size: 2  # Grounding DINO는 메모리를 많이 사용하므로 작은 배치 크기 권장
+  num_workers: 0
+  pin_memory: true
+
+training:
+  epochs: 100  # Grounding DINO 학습 epoch 수
+  learning_rate: 1.0e-05
+  weight_decay: 0.0001
+  patience: 20  # EarlyStopping patience (epochs without improvement)
+  accumulate_grad_batches: 4  # Gradient accumulation steps (effective batch size = batch_size * accumulate_grad_batches)
+
+trainer:
+  accelerator: gpu
+  devices: 1
+  precision: 16-mixed
+  
+  # Early stopping
+  early_stopping:
+    monitor: val_loss
+    patience: 20
+    mode: min
+    min_delta: 0.0
+    verbose: true
+
+evaluation:
+  score_threshold: 0.3
+  iou_threshold: 0.5
+  nms_threshold: 0.5
+  max_detections: 100
+  batch_size: 2
+
+logging:
+  tensorboard:
+    enabled: true
+  csv:
+    enabled: true
+
+hardware:
+  device: cuda
+  amp_enabled: true
+

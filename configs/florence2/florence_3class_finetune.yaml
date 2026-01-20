@@ -1,0 +1,126 @@
+# Florence-2 Fine-tuned Configuration for TomatOD_COCO_3
+# Fine-tuned model on TomatOD_COCO_3 dataset (3-class)
+# 1-class 성공 설정을 기반으로 개선
+
+experiment:
+  name: florence2_tomatod_3class_finetuned_exp001
+  seed: 42
+  save_dir: exp
+  log_image_enabled: true
+  log_image_interval: 5
+
+model:
+  arch_name: florence2
+  model_name: microsoft/Florence-2-base
+  num_labels: 3
+  learning_rate: 2.0e-05     # 개선: 5e-5 → 2e-5 (1-class는 1e-5, 3-class는 조금 높게)
+  weight_decay: 0.0001      
+
+florence2:
+  mode: finetuned
+  model_name: microsoft/Florence-2-base
+  checkpoint_path: exp/florence2/TomatOD_COCO_3_florence2_latest/checkpoints/best
+  
+  # Fine-tuning 후 클래스 맵
+  class_map:
+    0: fully_ripe
+    1: semi_ripe
+    2: unripe
+  
+  # LoRA Fine-tuning 설정 (1-class 성공 설정 적용)
+  use_lora: true
+  lora_r: 32              # 개선: 64 → 32 (overfitting 방지)
+  lora_alpha: 32          # 개선: 64 → 32
+  lora_dropout: 0.05       # 개선: 0.1 → 0.05
+  
+  # Letterbox resize 설정 (1-class에서 성공)
+  use_letterbox: true     # Aspect ratio 유지하며 resize
+  
+  # 데이터 증강 범위 설정 (1-class 성공 설정 적용)
+  augmentation:
+    brightness_range: [0.85, 1.15]  
+    contrast_range: [0.9, 1.1] 
+    saturation_range: [0.9, 1.1] 
+  
+  # Generation 파라미터
+  generation:
+    max_new_tokens: 1024
+    num_beams: 1
+    do_sample: false
+    use_cache: false
+  
+  # Confidence threshold
+  conf_threshold: 0.6      # 개선: 0.0 → 0.6 (1-class와 동일)
+  nms_threshold: 0.5
+
+training:
+  epochs: 300              
+  patience: 30           
+  gradient_clip_val: 1.0   # 개선: 5.0 → 1.0 (1-class와 동일)
+  accumulate_grad_batches: 1
+  
+  # Learning rate schedule (1-class 성공 설정 적용)
+  lr_scheduler: cosine     # 'linear' or 'cosine'
+  warmup_ratio: 0.1        # Warmup 비율 (전체 step의 10%)
+  
+  # Training settings
+  save_best: true
+  save_last: true
+  save_period: -1           # 주기적 저장 비활성화 (best/last만 저장)
+  
+  # Validation settings
+  val: true                 # validate during training
+  
+  # Advanced settings
+  amp: true                 # Automatic Mixed Precision training
+  profile: false
+
+data:
+  dataset_name: TomatOD_COCO_3
+  num_classes: 3
+  class_names:
+    - fully_ripe
+    - semi_ripe
+    - unripe
+  
+  # Paths
+  data_root: data/TomatOD_COCO_3
+  train_dir: data/TomatOD_COCO_3/train
+  val_dir: data/TomatOD_COCO_3/val
+  test_dir: data/TomatOD_COCO_3/test
+  
+  # Annotations
+  train_ann_file: custom_train.json
+  val_ann_file: custom_val.json
+  test_ann_file: custom_test.json
+  
+  # DataLoader settings
+  batch_size: 32           
+  num_workers: 8            
+  pin_memory: true
+
+evaluation:
+  score_threshold: 0.5
+  iou_threshold: 0.5
+  nms_threshold: 0.5
+  max_detections: 100
+  batch_size: 1
+
+test:
+  show_gt: false
+  box_color_mode: class
+
+# 디바이스 설정
+device: cuda
+
+# 로깅
+logging:
+  verbose: true
+  tensorboard:
+    enabled: true      
+  csv:
+    enabled: true       
+  save_log_file: true   
+
+hardware:
+  device: cuda

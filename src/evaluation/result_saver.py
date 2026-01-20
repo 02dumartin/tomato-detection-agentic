@@ -95,13 +95,21 @@ def save_evaluation_results(
                 for class_name in class_names[1:]:
                     class_ap_columns[f'{class_name}_AP@0.5:0.95'] = "N/A"
     
-    # 3. 통합 CSV 생성: mAP@0.5, 클래스별 AP@0.5:0.95, mAP@0.5:0.95, mAP@0.75, Precision, Recall, Parameter(M), GFLOPs
-    metric_names = ['mAP@0.5'] + list(class_ap_columns.keys()) + ['mAP@0.5:0.95', 'mAP@0.75', 'Precision', 'Recall', 'Parameter(M)', 'GFLOPs']
+    # 3. 통합 CSV 생성: mAP@0.5, 클래스별 AP@0.5:0.95, mAP@0.5:0.95, mAP@0.75, CA-mAP@0.5, CA-mAP@0.5:0.95, CA-mAP@0.75, Precision, Recall, Parameter(M), GFLOPs
+    metric_names = ['mAP@0.5'] + list(class_ap_columns.keys()) + [
+        'mAP@0.5:0.95', 'mAP@0.75',
+        'CA-mAP@0.5', 'CA-mAP@0.5:0.95', 'CA-mAP@0.75',  # CA-mAP 추가
+        'Precision', 'Recall', 'Parameter(M)', 'GFLOPs'
+    ]
     metric_values = [
         f"{detection_metrics['map_50']:.4f}",
     ] + list(class_ap_columns.values()) + [
         f"{detection_metrics['map']:.4f}",
         f"{detection_metrics['map_75']:.4f}",
+        # CA-mAP 값 추가
+        f"{detection_metrics.get('ca_map_50', 0.0):.4f}",
+        f"{detection_metrics.get('ca_map', 0.0):.4f}",
+        f"{detection_metrics.get('ca_map_75', 0.0):.4f}",
         f"{detailed_stats['total_statistics']['overall_precision']:.4f}",
         f"{detailed_stats['total_statistics']['overall_recall']:.4f}",
         f"{complexity_metrics['params_m']:.2f}" if complexity_metrics and complexity_metrics.get('params_m') else "N/A",
@@ -321,12 +329,20 @@ def save_summary_metrics(results_dict: Dict, output_dir: Path, config: Dict):
         for class_name in class_names:
             class_ap_columns[f'{class_name}_AP@0.5:0.95'] = "N/A"
 
-    metric_names = ['mAP@0.5'] + list(class_ap_columns.keys()) + ['mAP@0.5:0.95', 'mAP@0.75', 'Precision', 'Recall', 'Parameter(M)', 'GFLOPs']
+    metric_names = ['mAP@0.5'] + list(class_ap_columns.keys()) + [
+        'mAP@0.5:0.95', 'mAP@0.75',
+        'CA-mAP@0.5', 'CA-mAP@0.5:0.95', 'CA-mAP@0.75',  # CA-mAP 추가
+        'Precision', 'Recall', 'Parameter(M)', 'GFLOPs'
+    ]
     metric_values = [
         f"{results_dict['detection_metrics']['map_50']:.4f}",
     ] + list(class_ap_columns.values()) + [
         f"{results_dict['detection_metrics']['map']:.4f}",
         f"{results_dict['detection_metrics']['map_75']:.4f}" if results_dict['detection_metrics']['map_75'] else "N/A",
+        # CA-mAP 값 추가
+        f"{results_dict['detection_metrics'].get('ca_map_50', 0.0):.4f}",
+        f"{results_dict['detection_metrics'].get('ca_map', 0.0):.4f}",
+        f"{results_dict['detection_metrics'].get('ca_map_75', 0.0):.4f}",
         f"{results_dict['detailed_statistics']['total_statistics']['overall_precision']:.4f}",
         f"{results_dict['detailed_statistics']['total_statistics']['overall_recall']:.4f}",
         f"{results_dict['model_complexity'].get('params_m', 0):.2f}" if results_dict.get('model_complexity') and results_dict['model_complexity'].get('params_m') else "N/A",

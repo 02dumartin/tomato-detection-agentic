@@ -1,0 +1,85 @@
+# Florence-2 Zero-shot Configuration for Tomato_merge
+# Zero-shot inference without fine-tuning (1-class)
+
+experiment:
+  name: Null
+  seed: 42
+  save_dir: exp
+  log_image_enabled: true
+  log_image_interval: 5
+
+model:
+  arch_name: florence2
+  model_name: microsoft/Florence-2-base
+  num_labels: 1
+
+florence2:
+  mode: zeroshot
+  model_name: microsoft/Florence-2-base
+  
+  # Zero-shot에서는 checkpoint 불필요
+  checkpoint_path: none
+  
+  # Zero-shot 클래스 맵
+  class_map:
+    0: tomato
+  
+  # Generation 파라미터
+  generation:
+    max_new_tokens: 1024
+    num_beams: 1
+    do_sample: false
+    use_cache: false
+  
+  # Confidence threshold
+  conf_threshold: 0.0
+  nms_threshold: 0.5
+
+data:
+  dataset_name: TomatOD_1
+  num_classes: 1
+  class_names:
+    - tomato
+  
+  # Paths
+  data_root: data/TomatOD_1
+  train_dir: data/TomatOD_1/train
+  val_dir: data/TomatOD_1/val
+  test_dir: data/TomatOD_1/test
+
+  # Annotations
+  train_ann_file: custom_train.json
+  val_ann_file: custom_val.json
+  test_ann_file: custom_test.json
+  
+  # DataLoader settings
+  batch_size: 1
+  num_workers: 0
+  pin_memory: true
+
+evaluation:
+  score_threshold: 0.0
+  iou_threshold: 0.5
+  nms_threshold: 0.5
+  max_detections: 100
+  batch_size: 1
+
+test:
+  show_gt: false
+  box_color_mode: model
+
+# 디바이스 설정
+device: cuda
+
+# 로깅
+logging:
+  verbose: true
+  tensorboard:
+    enabled: false      
+  csv:
+    enabled: true       
+  save_log_file: true   
+
+hardware:
+  device: cuda
+

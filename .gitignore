@@ -12,11 +12,9 @@ ENV/
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb_checkpoints
+*.ipynb
 
-# PyTorch
-*.pth
-*.pt
-*.ckpt
+# PyTorch (moved to Model weights section)
 
 # Experiments
 exp/
@@ -26,6 +24,14 @@ wandb/
 
 # Data
 /data/
+
+# Model weights
+weights/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
 
 # Images (all formats)
 *.png
@@ -50,6 +56,17 @@ wandb/
 # Results (experiment outputs)
 results/
 
+# Python package build files
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Package manager lock files
+uv.lock
+poetry.lock
+Pipfile.lock
+
 # IDE
 .vscode/
 .idea/
@@ -59,6 +76,22 @@ results/
 # OS
 .DS_Store
 Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+*.log.*
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*~
 
 # Project specific
 .project-root

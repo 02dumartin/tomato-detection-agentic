@@ -1,10 +1,8 @@
 """DETR 모델 평가 유틸리티"""
-import json
-import pandas as pd
 from pathlib import Path
-from typing import Dict, Tuple, List
+from typing import Dict
 
-from ..metrics import (
+from .metrics import (
     evaluate_detection_metrics,
     evaluate_classification_metrics,
     calculate_model_complexity,
@@ -34,6 +32,38 @@ class DETREvaluator:
         self.score_threshold = score_threshold
         self.iou_threshold = iou_threshold
         self.split = split
+    
+    def _extract_class_ap(self, detection_results: Dict, key: str, class_names: list) -> Dict:
+        """클래스별 AP 추출 헬퍼 함수"""
+        class_ap = {}
+        if key not in detection_results:
+            return class_ap
+        
+        ap_data = detection_results[key]
+        try:
+            if ap_data is None:
+                ap_list = []
+            elif isinstance(ap_data, (int, float)):
+                ap_list = [float(ap_data)]
+            elif hasattr(ap_data, 'tolist'):
+                ap_list = ap_data.tolist()
+                if not isinstance(ap_list, list):
+                    ap_list = [ap_list]
+            elif isinstance(ap_data, (list, tuple)):
+                ap_list = [float(x) for x in ap_data]
+            else:
+                try:
+                    ap_list = [float(x) for x in iter(ap_data)]
+                except (TypeError, ValueError):
+                    ap_list = [float(ap_data)]
+            
+            for i, ap in enumerate(ap_list):
+                if i < len(class_names):
+                    class_ap[class_names[i]] = float(ap)
+        except Exception as e:
+            print(f"   Warning: Failed to extract {key}: {e}")
+        
+        return class_ap
 
     def evaluate(
         self,
@@ -73,54 +103,11 @@ class DETREvaluator:
             config=self.config,
         )
 
-        # 4. 클래스별 AP 추출 (YOLO 형식과 동일하게)
+        # 클래스별 AP 추출
         class_names = self.config['data']['class_names']
-        class_ap_50 = {}
-        class_ap_50_95 = {}
-        class_ap_75 = {}
-
-        # detection_results에서 클래스별 AP 추출
-        if 'map_per_class' in detection_results:
-            map_per_class = detection_results['map_per_class']
-            if hasattr(map_per_class, 'tolist'):
-                map_per_class = map_per_class.tolist()
-            elif hasattr(map_per_class, '__iter__') and not isinstance(map_per_class, str):
-                map_per_class = list(map_per_class)
-            else:
-                map_per_class = [map_per_class] if map_per_class is not None else []
-
-            # map_per_class는 보통 mAP@0.5:0.95에 해당
-            for i, ap in enumerate(map_per_class):
-                if i < len(class_names):
-                    class_ap_50_95[class_names[i]] = float(ap)
-
-        # map_50_per_class가 있으면 사용
-        if 'map_50_per_class' in detection_results:
-            map_50_per_class = detection_results['map_50_per_class']
-            if hasattr(map_50_per_class, 'tolist'):
-                map_50_per_class = map_50_per_class.tolist()
-            elif hasattr(map_50_per_class, '__iter__') and not isinstance(map_50_per_class, str):
-                map_50_per_class = list(map_50_per_class)
-            else:
-                map_50_per_class = [map_50_per_class] if map_50_per_class is not None else []
-
-            for i, ap in enumerate(map_50_per_class):
-                if i < len(class_names):
-                    class_ap_50[class_names[i]] = float(ap)
-
-        # map_75_per_class가 있으면 사용
-        if 'map_75_per_class' in detection_results:
-            map_75_per_class = detection_results['map_75_per_class']
-            if hasattr(map_75_per_class, 'tolist'):
-                map_75_per_class = map_75_per_class.tolist()
-            elif hasattr(map_75_per_class, '__iter__') and not isinstance(map_75_per_class, str):
-                map_75_per_class = list(map_75_per_class)
-            else:
-                map_75_per_class = [map_75_per_class] if map_75_per_class is not None else []
-
-            for i, ap in enumerate(map_75_per_class):
-                if i < len(class_names):
-                    class_ap_75[class_names[i]] = float(ap)
+        class_ap_50 = self._extract_class_ap(detection_results, 'map_50_per_class', class_names)
+        class_ap_50_95 = self._extract_class_ap(detection_results, 'map_per_class', class_names)
+        class_ap_75 = self._extract_class_ap(detection_results, 'map_75_per_class', class_names)
 
         # 결과 출력
         print("\n" + "="*70)
@@ -131,6 +118,14 @@ class DETREvaluator:
         print(f"mAP@0.75:      {detection_results['map_75']:.4f}")
         print(f"Precision:     {detailed_stats['total_statistics']['overall_precision']:.4f}")
         print(f"Recall:        {detailed_stats['total_statistics']['overall_recall']:.4f}")
+        
+        # CA-mAP 출력 추가
+        if 'ca_map' in detection_results:
+            print("\n[Class-Agnostic mAP (Localization)]")
+            print(f"CA-mAP@0.50:      {detection_results.get('ca_map_50', 0.0):.4f}")
+            print(f"CA-mAP@0.50:0.95: {detection_results.get('ca_map', 0.0):.4f}")
+            print(f"CA-mAP@0.75:      {detection_results.get('ca_map_75', 0.0):.4f}")
+        
         print("="*70)
 
         # 클래스별 AP 출력
@@ -166,6 +161,10 @@ class DETREvaluator:
                 'map_50': float(detection_results['map_50']),
                 'map': float(detection_results['map']),
                 'map_75': float(detection_results['map_75']),
+                # CA-mAP 추가
+                'ca_map_50': float(detection_results.get('ca_map_50', 0.0)),
+                'ca_map': float(detection_results.get('ca_map', 0.0)),
+                'ca_map_75': float(detection_results.get('ca_map_75', 0.0)),
             },
             'detailed_statistics': {
                 'total_statistics': {

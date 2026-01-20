@@ -1,7 +1,7 @@
 """Config 관리 및 CLI merge"""
 import yaml
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Union
 
 class ConfigDict(dict):
     """점(.) 표기법으로 접근 가능한 dict"""
@@ -75,3 +75,17 @@ def get_default_config_path(model_name: str, dataset_name: str) -> Path:
     config_path = Path(f"configs/{model_name}/{dataset_name.lower()}.yaml")
     
     return config_path if config_path.exists() else None
+
+
+def save_config(config: Dict[str, Any], filepath: Union[str, Path]):
+    """
+    Config를 YAML 파일로 저장
+    
+    Args:
+        config: 설정 딕셔너리
+        filepath: 저장할 파일 경로
+    """
+    filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    with open(filepath, 'w', encoding='utf-8') as f:
+        yaml.dump(config, f, default_flow_style=False, allow_unicode=True)

@@ -6,6 +6,7 @@ import random
 import math
 import numpy as np
 from PIL import Image
+from pathlib import Path
 
 class DetrCocoDataset(torchvision.datasets.CocoDetection):
     """
@@ -221,6 +222,15 @@ class DetrCocoDataset(torchvision.datasets.CocoDetection):
         # PIL 이미지와 COCO 형식의 타겟 읽기
         # super().__getitem__은 (img, target)을 반환하고, target은 COCO annotations 리스트
         img, target = super().__getitem__(idx)
+        
+        # 이미지 회전 처리 (COCO annotation의 orientation 정보 사용)
+        from ...utils.vis_utils import load_and_orient_image
+        image_id = self.ids[idx]
+        # 이미지 경로 가져오기
+        img_info = self.coco.loadImgs(image_id)[0]
+        img_path = Path(self.root) / img_info['file_name']
+        # 회전 처리된 이미지로 교체
+        img = load_and_orient_image(img_path, self.coco.dataset, image_id)
 
         # 색상 증강 (bbox 수정 불필요)
         if self.color_augment is not None:
