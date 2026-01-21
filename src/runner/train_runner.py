@@ -104,8 +104,23 @@ class TrainRunner:
                 DetrCocoDataset
             )
             
+            data_cfg = self.config.get('data', {})
+            processor_kwargs = {}
+            img_size = data_cfg.get('image_size')
+            max_size = data_cfg.get('max_size')
+            # HF DetrImageProcessor는 size에 dict로 shortest_edge / longest_edge를 함께 넘길 수 있다.
+            # 노트북에서 사용한 설정과 동일하게 반영한다.
+            if img_size and max_size:
+                processor_kwargs["size"] = {"shortest_edge": img_size, "longest_edge": max_size}
+            elif img_size:
+                processor_kwargs["size"] = {"shortest_edge": img_size}
+            elif max_size:
+                # shortest_edge가 없더라도 longest_edge만 지정할 수 있도록 fallback
+                processor_kwargs["size"] = {"longest_edge": max_size}
+
             imageprocessor = DetrImageProcessor.from_pretrained(
-                self.config['model']['pretrained_path']
+                self.config['model']['pretrained_path'],
+                **processor_kwargs
             )
             
             train_dataset = create_detr_dataset(dataset_meta, "train", imageprocessor, self.config)

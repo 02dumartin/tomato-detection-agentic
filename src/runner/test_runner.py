@@ -221,8 +221,21 @@ class TestRunner:
             from transformers import DetrImageProcessor
             from ..data.transforms.detr_transform import create_detr_dataset, DetrCocoDataset
             
+            data_cfg = self.config.get('data', {})
+            processor_kwargs = {}
+            img_size = data_cfg.get('image_size')
+            max_size = data_cfg.get('max_size')
+            # 노트북에서 사용한 DETR resize와 동일하게 shortest_edge/longest_edge를 함께 설정
+            if img_size and max_size:
+                processor_kwargs["size"] = {"shortest_edge": img_size, "longest_edge": max_size}
+            elif img_size:
+                processor_kwargs["size"] = {"shortest_edge": img_size}
+            elif max_size:
+                processor_kwargs["size"] = {"longest_edge": max_size}
+
             imageprocessor = DetrImageProcessor.from_pretrained(
-                self.config['model']['pretrained_path']
+                self.config['model']['pretrained_path'],
+                **processor_kwargs
             )
             
             # 테스트할 데이터셋 로드

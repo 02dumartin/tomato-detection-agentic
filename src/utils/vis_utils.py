@@ -162,7 +162,7 @@ def _draw_boxes(draw, boxes, labels, scores, box_colors, class_names, show_label
             x1, y1, x2, y2 = box_cxcywh_to_xyxy(box, img_size)
         
         color = box_colors.get(int(label), (255, 255, 255))
-        draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
+        draw.rectangle([x1, y1, x2, y2], outline=color, width=4)
         
         if show_labels and int(label) < len(class_names):
             text = f"{class_names[int(label)]}: {score:.2f}"

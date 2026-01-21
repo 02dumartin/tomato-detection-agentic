@@ -13,6 +13,12 @@ DatasetRegistry.register("Tomato_merge_1")(TomatomMerge1Meta)
 DatasetRegistry.register("TomatOD_1_YOLO")(TomatomMerge1Meta)  # Alias for YOLO format 1-class
 DatasetRegistry.register("TomatOD_1")(TomatomMerge1Meta)  # Alias for 1-class configs
 
+# New 1-class datasets
+DatasetRegistry.register("TomatOD_1_2k")(TomatomMerge1Meta)  # 2000 images dataset
+DatasetRegistry.register("TomatOD_1_2k_YOLO")(TomatomMerge1Meta)  # YOLO format alias
+DatasetRegistry.register("TomatOD_1_4k")(TomatomMerge1Meta)  # 4000 images dataset
+DatasetRegistry.register("TomatOD_1_4k_YOLO")(TomatomMerge1Meta)  # YOLO format alias
+
 DATASET_REGISTRY = DatasetRegistry
 
 __all__ = ['DATASET_REGISTRY', 'DatasetRegistry', 'TomatOD3Meta', 'TomatomMerge1Meta']

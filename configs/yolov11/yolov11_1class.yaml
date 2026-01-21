@@ -25,19 +25,19 @@ model:
   dfl: 1.5           # dfl loss gain
 
 data:
-  dataset_name: Tomato_1_YOLO
+  dataset_name: TomatOD_1_4k_YOLO
   num_classes: 1
   class_names:
     - tomato
   
   # Paths (YOLO 형식)
-  data_root: data/TomatOD_1_YOLO
-  train_dir: data/TomatOD_1_YOLO/train/images
-  val_dir: data/TomatOD_1_YOLO/val/images
-  test_dir: data/TomatOD_1_YOLO/test/images
+  data_root: data/TomatOD_1_4k_YOLO
+  train_dir: data/TomatOD_1_2k_YOLO/train/images
+  val_dir: data/TomatOD_1_4k_YOLO/val/images
+  test_dir: data/TomatOD_1_4k_YOLO/test/images
   
   # YOLO data.yaml 파일 경로
-  data_yaml: data/TomatOD_1_YOLO/data.yaml
+  data_yaml: data/TomatOD_1_4k_YOLO/data.yaml
   
   # DataLoader settings
   batch_size: 24

@@ -31,16 +31,16 @@ model:
   dropout: 0.1
 
 data:
-  dataset_name: TomatOD_1
+  dataset_name: TomatOD_1_2k
   num_classes: 1
   class_names:
     - tomato
   
   # Paths
-  data_root: data/TomatOD_1
-  train_dir: data/TomatOD_1/train
-  val_dir: data/TomatOD_1/val
-  test_dir: data/TomatOD_1/test
+  data_root: data/TomatOD_1_2k
+  train_dir: data/TomatOD_1_2k/train
+  val_dir: data/TomatOD_1_2k/val
+  test_dir: data/TomatOD_1_2k/test
 
   # Annotations
   train_ann_file: custom_train.json
@@ -54,6 +54,7 @@ data:
   
   # Image preprocessing
   image_size: 800
+  max_size: 1333
   
   # Data augmentation
   use_augmentation: true
@@ -144,4 +145,3 @@ hardware:
   amp_enabled: true
   cudnn_benchmark: true
   deterministic: false
-
